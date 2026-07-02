@@ -25,6 +25,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "db_path": "data/element-plus.qdrant",
     "collection": "element_plus_docs",
     "sidebars_dir": "sidebars",
+    "site_base": "https://element-plus.org",
+    "context_ttl_days": 30,
     "endpoints": {},
     "query": {
         "default_top_k": 5,

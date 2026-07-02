@@ -26,6 +26,20 @@ _MAIN_RE = re.compile(r"<main\b[^>]*>(.*?)</main>", re.DOTALL | re.IGNORECASE)
 # <title> tag for the page title fallback.
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.DOTALL | re.IGNORECASE)
 
+# C1: Cloudflare email protection generates RANDOM hash tokens in
+# /cdn-cgi/l/email-protection#<hex> URLs on every page load. These make the
+# content_hash unstable (changes every fetch even though content is identical).
+# Strip these artifacts before HTML→Markdown conversion so context_hash is
+# deterministic across fetches of the same page.
+_CF_EMAIL_LINK_RE = re.compile(
+    r'<a\s+[^>]*href="/cdn-cgi/l/email-protection[^"]*"[^>]*>(.*?)</a>',
+    re.DOTALL | re.IGNORECASE,
+)
+_CF_EMAIL_ATTR_RE = re.compile(
+    r'/cdn-cgi/l/email-protection#[0-9a-fA-F]+',
+    re.IGNORECASE,
+)
+
 COMMON_HEADERS: dict[str, str] = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -213,13 +227,19 @@ def extract_main_html(full_html: str) -> str:
 
     Element Plus doc pages wrap the article content in <main>, so extracting
     it first avoids converting nav/sidebar/footer chrome into Markdown.
+
+    C1: also strips Cloudflare email-protection artifacts (random hash tokens
+    that change every page load) so context_hash is deterministic across
+    fetches of the same page.
     """
     if not full_html:
         return ""
     m = _MAIN_RE.search(full_html)
-    if m:
-        return m.group(1)
-    return full_html
+    html = m.group(1) if m else full_html
+    # C1: strip Cloudflare email protection artifacts for stable content_hash
+    html = _CF_EMAIL_LINK_RE.sub(r"\1", html)  # unwrap email-protection links
+    html = _CF_EMAIL_ATTR_RE.sub("", html)       # remove leftover hash attrs
+    return html
 
 
 def extract_page_title(full_html: str) -> str:

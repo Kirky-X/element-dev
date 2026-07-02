@@ -34,6 +34,7 @@ SIDEBAR_FILE_MAP: dict[str, str] = {
 }
 
 NO_DESCRIPTION = "无描述"
+NO_CONTEXT = ""  # empty string = context not yet fetched
 
 
 def _now_iso() -> str:
@@ -54,7 +55,8 @@ def _make_content_hash(
     """Content fingerprint = sha1 over the doc's content-bearing fields.
 
     Same formula as hap-dev (B4): title + url + doc_type + description +
-    sorted links. Order-invariant on links.
+    sorted links. Order-invariant on links. Used by reindex to detect if
+    a doc needs re-embedding (description/links changed).
     """
     sorted_links = sorted(links) if links else []
     raw = (
@@ -64,12 +66,27 @@ def _make_content_hash(
     return hashlib.sha1(raw).hexdigest()
 
 
+def make_context_hash(context: str) -> str:
+    """Hash of the fetched webpage content (context field).
+
+    Used by fetch_update to detect if the webpage content changed since the
+    last fetch. Empty string → empty hash (so unfetched docs all share "").
+    """
+    if not context:
+        return ""
+    return hashlib.sha1(context.encode("utf-8")).hexdigest()
+
+
 def parse_sidebar(path: str, doc_type: str) -> list[dict[str, Any]]:
     """Parse a sidebar markdown file into a list of doc records.
 
-    Each record has the 10-field schema (same as hap-dev after B1+B4):
-      id, title, doc_type, url, description, links,
-      created_at, updated_at, content_hash, embed_model.
+    Each record has the 12-field schema (after C1 upgrade — context support):
+      id, title, doc_type, url, description, context, links,
+      created_at, updated_at, content_hash, context_hash, embed_model.
+
+    `context` and `context_hash` are initially empty — populated by
+    fetch_update when the URL is fetched. `embed_model` is "" until the
+    indexer stamps it on build/upsert.
 
     Raises FileNotFoundError if `path` does not exist (Rule 12: fail loud).
     """
@@ -96,12 +113,14 @@ def parse_sidebar(path: str, doc_type: str) -> list[dict[str, Any]]:
                 "doc_type": doc_type,
                 "url": url,
                 "description": NO_DESCRIPTION,
+                "context": NO_CONTEXT,  # C1: empty until fetch_update populates it
                 "links": [],
                 "created_at": now,
                 "updated_at": now,
                 "content_hash": _make_content_hash(
                     title, url, doc_type, NO_DESCRIPTION, [],
                 ),
+                "context_hash": "",  # C1: empty until fetch_update populates it
                 "embed_model": "",
             })
     return docs

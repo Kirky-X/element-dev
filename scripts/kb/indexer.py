@@ -28,9 +28,11 @@ ID_FIELD = "id"
 # the vector). NB: 'title' is in the whitelist because links.py / merge.py
 # legitimately write it via set_payload when merging. The vector is NOT in
 # this set because set_payload never touches the vector by design.
+# C1: added `context` and `context_hash` for webpage content storage.
 PAYLOAD_FIELDS = frozenset({
     "id", "title", "doc_type", "url", "description",
-    "links", "created_at", "updated_at", "content_hash", "embed_model",
+    "context", "links", "created_at", "updated_at",
+    "content_hash", "context_hash", "embed_model",
 })
 
 
@@ -167,6 +169,7 @@ class QdrantIndexer:
 
         B1: includes `embed_model` as the 10th field. Old docs without it
         read back as "" via `_payload_from` (legacy tolerance).
+        C1: includes `context` and `context_hash` for webpage content storage.
         """
         return {
             ID_FIELD: doc["id"],
@@ -174,10 +177,12 @@ class QdrantIndexer:
             "doc_type": doc["doc_type"],
             "url": doc["url"],
             "description": doc.get("description", NO_DESCRIPTION),
+            "context": doc.get("context", ""),
             "links": doc.get("links", []),
             "created_at": doc["created_at"],
             "updated_at": doc["updated_at"],
             "content_hash": doc["content_hash"],
+            "context_hash": doc.get("context_hash", ""),
             "embed_model": doc.get("embed_model", ""),
         }
 
@@ -309,10 +314,13 @@ class QdrantIndexer:
             "doc_type": payload["doc_type"],
             "url": payload["url"],
             "description": payload.get("description", NO_DESCRIPTION),
+            # C1: legacy tolerance — pre-C1 docs lack context/context_hash.
+            "context": payload.get("context") or "",
             "links": payload.get("links", []) or [],
             "created_at": payload["created_at"],
             "updated_at": payload["updated_at"],
             "content_hash": payload["content_hash"],
+            "context_hash": payload.get("context_hash") or "",
             # B1: legacy tolerance — pre-B1 docs lack this field; treat as "".
             # Use `or ""` to also coerce None (left over by some Qdrant ops).
             "embed_model": payload.get("embed_model") or "",

@@ -29,6 +29,7 @@ from typing import Any, Optional
 
 from .config import DEFAULT_CONFIG, ensure_config, load_config
 from .embed import Embedder
+from .fetch_update import fetch_and_update
 from .indexer import QdrantIndexer
 from .links import update_links
 from .links_auto import auto_link
@@ -39,7 +40,8 @@ from .sidebar_parser import parse_all_sidebars
 from .update_description import update_description
 
 ACTIONS = ("query", "build", "merge", "reindex", "update-description",
-           "update-links", "link-auto", "migrate-embed-model", "config")
+           "update-links", "link-auto", "migrate-embed-model",
+           "fetch-update", "config")
 
 
 # ---- factories (kept module-level so tests can monkeypatch them) -----------
@@ -132,6 +134,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     c = sub.add_parser("config", help="print the effective config")
     c.add_argument("--config", default=None)
+
+    # C1: fetch + smart update with TTL caching
+    fu = sub.add_parser("fetch-update",
+                        help="fetch URL, update context/description/vector (C1)")
+    fu.add_argument("--id", required=True, help="doc id to update")
+    fu.add_argument("--force", action="store_true",
+                    help="skip TTL check, always fetch")
+    fu.add_argument("--ttl-days", type=int, default=None,
+                    help="override context_ttl_days from config")
+    fu.add_argument("--config", default=None)
     return p
 
 
@@ -227,6 +239,41 @@ def _run_config(args: argparse.Namespace) -> Any:
     return cfg
 
 
+def _run_fetch_update(args: argparse.Namespace) -> Any:
+    """C1: fetch URL → update context/description/vector with TTL caching."""
+    cfg = _load_cfg(args.config)
+    ttl_days = args.ttl_days if args.ttl_days is not None else cfg.get("context_ttl_days", 30)
+    emb = make_embedder(cfg)
+    idx = make_indexer(cfg)
+    # Lazy-import fetcher to avoid httpx dependency at module load time
+    from scripts.fetcher.fetch import fetch as do_fetch
+    class _FetcherAdapter:
+        """Adapts fetch() function to the fetcher.fetch(url) interface."""
+        def fetch(self, url: str) -> dict:
+            return do_fetch(url)
+    try:
+        result = fetch_and_update(
+            args.id, idx, emb, _FetcherAdapter(),
+            ttl_days=ttl_days, force=args.force,
+        )
+    finally:
+        idx.close()
+    out = {
+        "action": result["action"],
+        "reason": result["reason"],
+        "doc_id": args.id,
+        "title": result["doc"].get("title", ""),
+        "url": result["doc"].get("url", ""),
+        "description": result["doc"].get("description", ""),
+        "has_context": bool(result["doc"].get("context")),
+        "context_length": len(result["doc"].get("context", "")),
+        "context_hash": result["doc"].get("context_hash", "")[:16],
+        "updated_at": result["doc"].get("updated_at", ""),
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return out
+
+
 def _run_link_auto(args: argparse.Namespace) -> Any:
     """B2: auto-link docs by vector cosine similarity > threshold."""
     cfg = _load_cfg(args.config)
@@ -317,6 +364,7 @@ _DISPATCH = {
     "update-links": _run_update_links,
     "link-auto": _run_link_auto,
     "migrate-embed-model": _run_migrate_embed_model,
+    "fetch-update": _run_fetch_update,
     "config": _run_config,
 }
 

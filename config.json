@@ -1,4 +1,5 @@
 {
+  "version": "0.1.1",
   "embed_model": "sentence-transformers/paraphrase-MiniLM-L3-v2",
   "embed_dim": 384,
   "embed_source": "modelscope",

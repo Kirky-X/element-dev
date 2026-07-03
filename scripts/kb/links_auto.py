@@ -54,15 +54,21 @@ def _add_link_bidirectional(
     max_per_doc: int,
     now: str,
 ) -> bool:
-    """Add a↔b bidirectional link if not present and both sides have capacity.
+    """Add a↔b bidirectional link, completing a missing direction if needed.
 
     Mutates a_doc["links"] and b_doc["links"] in place (caller then persists
-    via set_payload). Returns True ONLY if a complete bidirectional pair was
-    added (both directions). Returns False if:
-      - self-link
-      - already linked both ways
-      - capacity exceeded on EITHER side (we refuse to add a one-way link;
-        bidirectionality is the contract — Rule 3 禁止简化实现)
+    via set_payload). Returns True if either:
+      (a) a complete bidirectional pair was newly created (both directions
+          were missing and got added), OR
+      (b) a half-pair was completed — one direction already existed and the
+          missing direction was appended, provided the receiving side had
+          capacity (BUG-4).
+    Returns False if:
+      - self-link (a_id == b_id)
+      - already linked both ways (idempotent)
+      - the receiving side for a missing direction is at max_per_doc
+        (capacity contract still holds — but only on the side that would
+        actually grow)
     """
     if a_id == b_id:
         return False
@@ -71,14 +77,22 @@ def _add_link_bidirectional(
     already = b_id in a_links and a_id in b_links
     if already:
         return False
-    # Both sides must have capacity — bidirectional is the contract.
-    if len(a_links) >= max_per_doc:
+    # BUG-4: only check capacity on the side that will actually grow.
+    # The old code checked both sides unconditionally, which blocked
+    # completing a missing direction when the already-linked side was full
+    # — even though that side wouldn't receive a new link. The capacity
+    # contract still holds for the receiving side.
+    need_a_to_b = b_id not in a_links
+    need_b_to_a = a_id not in b_links
+    # need_a_to_b and need_b_to_a can't both be False here — the `already`
+    # check above would have short-circuited that case.
+    if need_a_to_b and len(a_links) >= max_per_doc:
         return False
-    if len(b_links) >= max_per_doc:
+    if need_b_to_a and len(b_links) >= max_per_doc:
         return False
-    if b_id not in a_links:
+    if need_a_to_b:
         a_links.append(b_id)
-    if a_id not in b_links:
+    if need_b_to_a:
         b_links.append(a_id)
     return True
 

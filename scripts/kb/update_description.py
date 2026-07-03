@@ -46,6 +46,12 @@ def update_description(
         doc["description"], doc.get("links", []),
     )
 
+    # BUG-1: refuse cross-model writes — same guard as `query()`. A mismatched
+    # embedder here would silently stamp a foreign embed_model onto the doc and
+    # pollute the DB's vector space (cosine similarity across models is noise).
+    from .model_compat import assert_compatible
+    assert_compatible(indexer, embedder, context="update_description")
+
     # indexer.upsert recomputes the vector from `description` (since it now !=
     # "无描述"), overwriting both the vector and the payload's description +
     # updated_at + content_hash fields in one shot.

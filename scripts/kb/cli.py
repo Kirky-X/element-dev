@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from typing import Any, Optional
 
@@ -113,8 +112,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     ul = sub.add_parser("update-links", help="extract & write bidirectional links")
     ul.add_argument("--id", required=True)
-    ul.add_argument("--content", required=True,
-                    help="doc body markdown, or a path to a file containing it")
+    # BUG-5: --content (literal) / --file (path) mutually exclusive —
+    # eliminates the old os.path.exists heuristic that mis-read literal
+    # content as a file path when it happened to exist on disk.
+    g = ul.add_mutually_exclusive_group(required=True)
+    g.add_argument("--content", help="literal links content (JSON or markdown)")
+    g.add_argument("--file", dest="file_path",
+                   help="path to file containing links content")
     ul.add_argument("--config", default=None)
 
     la = sub.add_parser("link-auto",
@@ -221,10 +225,12 @@ def _run_update_links(args: argparse.Namespace) -> Any:
     cfg = _load_cfg(args.config)
     idx = make_indexer(cfg)
     try:
-        content = args.content
-        if os.path.exists(content):
-            with open(content, encoding="utf-8") as f:
+        # BUG-5: --content is literal, --file reads from disk. No heuristic.
+        if args.file_path:
+            with open(args.file_path, encoding="utf-8") as f:
                 content = f.read()
+        else:
+            content = args.content
         linked = update_links(args.id, content, idx)
     finally:
         idx.close()

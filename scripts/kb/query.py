@@ -96,19 +96,13 @@ def _check_model_compatibility(indexer: Any, embedder: Any) -> None:
     """B5: raise ValueError if embedder.model_name differs from the DB's
     embed_model. Empty embed_model in the DB (legacy) is treated as
     "unknown" — query proceeds, the migrate-embed-model script will backfill.
+
+    BUG-1: thin wrapper over `model_compat.assert_compatible` so all three
+    vector-touching entry points (query / update_description / fetch_update)
+    enforce the same rule from one source of truth.
     """
-    cur = embedder.model_name
-    models = indexer.get_embed_models()
-    real = {m for m in models if m}
-    if not real:
-        return  # legacy DB — allow
-    if cur not in real:
-        raise ValueError(
-            f"query: embed_model mismatch — embedder is {cur!r}, DB was built "
-            f"with {real!r}. Cosine similarity across models is meaningless. "
-            f"Either revert config.json to the DB's model, or run "
-            f"`python3 scripts/kb/build_db.py` to rebuild with the new model."
-        )
+    from .model_compat import assert_compatible
+    assert_compatible(indexer, embedder, context="query")
 
 
 def query(

@@ -49,9 +49,13 @@ htmlcov/
 
 # OpenSpec 工作流产物（设计文档，不入仓库）
 openspec/
+specmark/
+sidebars/
 
 # 测试代码（开发期使用，不入仓库）
-scripts/**/tests/
+tests/
+**/tests/
+**/test/
 
 # Darwin skill 优化产物（开发期使用，不入仓库）
 results.tsv

@@ -132,6 +132,16 @@ def fetch_and_update(
         }
 
     content = result.get("content", "")
+    # BUG-3: refuse empty/whitespace-only fetch — the hash compare below
+    # would otherwise see "content changed" (empty != old) and overwrite
+    # the doc's existing context/description/vector with emptiness, silently
+    # destroying assets. Guard before any write.
+    if not content.strip():
+        return {
+            "action": "error",
+            "doc": doc,
+            "reason": "fetch returned empty content — existing context/description/vector preserved",
+        }
     new_context_hash = make_context_hash(content)
     old_context_hash = doc.get("context_hash", "")
 
@@ -163,6 +173,12 @@ def fetch_and_update(
         doc["title"], doc["url"], doc["doc_type"],
         doc["description"], doc.get("links", []),
     )
+
+    # BUG-1: refuse cross-model writes — same guard as `query()`. A mismatched
+    # embedder here would silently stamp a foreign embed_model onto the doc and
+    # pollute the DB's vector space (cosine similarity across models is noise).
+    from .model_compat import assert_compatible
+    assert_compatible(indexer, embedder, context="fetch_update")
 
     # 4c. upsert recomputes vector from new description + stamps embed_model
     indexer.upsert(doc, embedder)

@@ -7,16 +7,139 @@ This module keeps the html_to_markdown converter from hap-dev verbatim (it is
 generic HTML→Markdown, not HarmonyOS-specific) plus a few Element Plus
 specifics: site base URL, main-content container selector, common headers.
 """
+
 from __future__ import annotations
 
+import ipaddress
 import re
+import socket
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
 # Element Plus doc site base. Sidebars already store full URLs, so this is
 # only used for documentation / sanity checks.
 SITE_BASE = "https://element-plus.org"
+
+# Default SSRF host whitelist — the doc site the skill is built to fetch from.
+# Hosts are compared case-insensitively. `site_base`'s host is always added at
+# validate-time, so changing config.json's site_base extends the whitelist
+# without editing code.
+DEFAULT_ALLOWED_HOSTS: frozenset[str] = frozenset(
+    {
+        "element-plus.org",
+        "www.element-plus.org",
+    }
+)
+
+# Cap on manual redirect following. We disable httpx auto-redirect and walk
+# Location headers ourselves so every hop is host-validated (SSRF guard against
+# open-redirect → internal-network pivoting).
+MAX_REDIRECTS = 3
+
+
+def _is_blocked_ip(ip_str: str) -> bool:
+    """True if `ip_str` points at a private/loopback/link-local/reserved/
+    multicast/multicast/unspecified address — the SSRF "internal network" space.
+
+    Applies unconditionally, even when `allow_any_host=True`, because allowing
+    arbitrary hosts must NOT permit pivoting onto 127.0.0.1 / 169.254.169.254
+    (cloud metadata) / RFC1918 ranges.
+    """
+    try:
+        ip = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False  # not an IP literal — host validation handles DNS names
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
+def _resolve_hosts(hostname: str) -> list[str]:
+    """Resolve `hostname` to its IPv4/IPv6 address strings. Empty on DNS failure.
+
+    Used to block hostnames that resolve to internal IPs (DNS-rebinding / split
+    horizon SSRF). Resolution failures are NOT fatal — the host-whitelist check
+    still applies; we just can't assert about IPs we couldn't resolve.
+    """
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except (socket.gaierror, socket.herror, OSError):
+        return []
+    seen: list[str] = []
+    for info in infos:
+        try:
+            addr = info[4][0]
+        except (IndexError, TypeError):
+            continue
+        if addr not in seen:
+            seen.append(addr)
+    return seen
+
+
+def _validate_host(
+    url: str,
+    *,
+    allow_any_host: bool = False,
+    site_base: str | None = None,
+    allowed_hosts: frozenset[str] | None = None,
+    resolve_dns: bool = True,
+) -> None:
+    """SSRF guard — raise ValueError if `url`'s host is not permitted.
+
+    Two-layer defense:
+      1. DNS resolution → block any resolved IP in the internal network space
+         (private/loopback/link-local/reserved/multicast/unspecified). This
+         fires even when `allow_any_host=True` — it is the hard floor.
+      2. Hostname whitelist — default-allow only the Element Plus doc domains
+         plus `site_base`'s host. `allow_any_host=True` skips this layer
+         (but NOT layer 1).
+
+    Call this on the request URL and on every redirect Location.
+    """
+    parts = urlsplit(url)
+    scheme = (parts.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(f"SSRF guard: refusing non-http(s) URL: {url!r}")
+    host = parts.hostname
+    if not host:
+        raise ValueError(f"SSRF guard: URL has no host: {url!r}")
+
+    # Layer 1: IP-space block (unconditional).
+    # First if the host is itself an IP literal, then via DNS resolution.
+    if _is_blocked_ip(host):
+        raise ValueError(f"SSRF guard: host {host!r} is a blocked IP literal ({url!r})")
+    if resolve_dns:
+        for addr in _resolve_hosts(host):
+            if _is_blocked_ip(addr):
+                raise ValueError(
+                    f"SSRF guard: host {host!r} resolves to internal IP "
+                    f"{addr} ({url!r}) — refusing (even with --allow-any-host)"
+                )
+
+    # Layer 2: hostname whitelist.
+    if allow_any_host:
+        return
+    allow = set(DEFAULT_ALLOWED_HOSTS)
+    if allowed_hosts:
+        allow.update(allowed_hosts)
+    if site_base:
+        sb_host = urlsplit(site_base).hostname
+        if sb_host:
+            allow.add(sb_host)
+    if host.lower() not in {h.lower() for h in allow}:
+        raise ValueError(
+            f"SSRF guard: host {host!r} not in whitelist {sorted(allow)} "
+            f"(url={url!r}). Pass allow_any_host=True / --allow-any-host to "
+            f"override (internal-IP block still applies)."
+        )
+
 
 # Element Plus doc pages put the main content inside <main> ... </main>.
 # We extract that subset before HTML→Markdown conversion to avoid converting
@@ -36,7 +159,7 @@ _CF_EMAIL_LINK_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 _CF_EMAIL_ATTR_RE = re.compile(
-    r'/cdn-cgi/l/email-protection#[0-9a-fA-F]+',
+    r"/cdn-cgi/l/email-protection#[0-9a-fA-F]+",
     re.IGNORECASE,
 )
 
@@ -67,7 +190,9 @@ _A_SQUOTE_RE = re.compile(
     r"<a\s+[^>]*?href\s*=\s*'([^']*)'[^>]*>(.*?)</a>",
     re.DOTALL | re.IGNORECASE,
 )
-_STRONG_RE = re.compile(r"<(?:strong|b)\b[^>]*>(.*?)</(?:strong|b)>", re.DOTALL | re.IGNORECASE)
+_STRONG_RE = re.compile(
+    r"<(?:strong|b)\b[^>]*>(.*?)</(?:strong|b)>", re.DOTALL | re.IGNORECASE
+)
 _EM_RE = re.compile(r"<(?:em|i)\b[^>]*>(.*?)</(?:em|i)>", re.DOTALL | re.IGNORECASE)
 _TABLE_RE = re.compile(r"<table[^>]*>.*?</table>", re.DOTALL | re.IGNORECASE)
 _TR_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
@@ -238,7 +363,7 @@ def extract_main_html(full_html: str) -> str:
     html = m.group(1) if m else full_html
     # C1: strip Cloudflare email protection artifacts for stable content_hash
     html = _CF_EMAIL_LINK_RE.sub(r"\1", html)  # unwrap email-protection links
-    html = _CF_EMAIL_ATTR_RE.sub("", html)       # remove leftover hash attrs
+    html = _CF_EMAIL_ATTR_RE.sub("", html)  # remove leftover hash attrs
     return html
 
 

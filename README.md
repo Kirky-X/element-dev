@@ -6,23 +6,23 @@ element-dev 是一个面向 AI agent 的 Vue 3 + Element Plus 组件库开发 sk
 
 ## 3 个子命令速览
 
-| 子命令   | 一句话功能                                                              | 主要脚本                                       |
-| -------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
-| `kb`     | 本地 Qdrant 知识库：9 子动作（query/build/reindex/merge/link-auto/…）   | `scripts/kb/*.py` + 预构建库                   |
-| `fetch`  | 直接 HTTP GET 抓取 element-plus.org 静态文档页，提取 `<main>` 转 Markdown | `scripts/fetcher/{_http,fetch}.py`             |
-| `config` | 显示/修改 embed_model、rerank_model、db_path、context_ttl_days 等配置项 | `scripts/kb/config.py`                         |
+| 子命令   | 一句话功能                                                                | 主要脚本                           |
+| -------- | ------------------------------------------------------------------------- | ---------------------------------- |
+| `kb`     | 本地 Qdrant 知识库：9 子动作（query/build/reindex/merge/link-auto/…）     | `scripts/kb/*.py` + 预构建库       |
+| `fetch`  | 直接 HTTP GET 抓取 element-plus.org 静态文档页，提取 `<main>` 转 Markdown | `scripts/fetcher/{_http,fetch}.py` |
+| `config` | 显示/修改 embed_model、rerank_model、db_path、context_ttl_days 等配置项   | `scripts/kb/config.py`             |
 
 子命令路由表、触发词、各子动作完整流程见 [SKILL.md](SKILL.md)。
 
 ## 与 hap-dev 的差异
 
-| 维度 | hap-dev | element-dev |
-| ---- | ------- | ----------- |
-| 文档源 | HarmonyOS 搜索 API（POST + 多 catalog 路由） | element-plus.org 静态站点（HTTP GET） |
-| 在线模块 | `scripts/search/{search.py, detail.py}` 双端点 | `scripts/fetcher/fetch.py` 单一 GET |
-| Sidebar 格式 | `#### N.N [title](url)` | `### N.N[.] [title](url)`（3 hashes + 可选尾点） |
-| 文档数 | 964（9 类） | 99（2 类：design-guide + component） |
-| KB 模块 | 领域无关 | 同 hap-dev（B1-B13 修复全部继承） |
+| 维度         | hap-dev                                        | element-dev                                      |
+| ------------ | ---------------------------------------------- | ------------------------------------------------ |
+| 文档源       | HarmonyOS 搜索 API（POST + 多 catalog 路由）   | element-plus.org 静态站点（HTTP GET）            |
+| 在线模块     | `scripts/search/{search.py, detail.py}` 双端点 | `scripts/fetcher/fetch.py` 单一 GET              |
+| Sidebar 格式 | `#### N.N [title](url)`                        | `### N.N[.] [title](url)`（3 hashes + 可选尾点） |
+| 文档数       | 964（9 类）                                    | 99（2 类：design-guide + component）             |
+| KB 模块      | 领域无关                                       | 同 hap-dev（B1-B13 修复全部继承）                |
 
 ## 安装
 
@@ -37,36 +37,44 @@ pip install -r requirements.txt
 - **必需**：`qdrant-client`、`rank-bm25`、`httpx`、`sentence-transformers`、`modelscope`
 - **可选**：`flashrank`（重排）、`openai`（云端嵌入模型）
 
-### sidebars 目录
+### sidebars 目录（首次使用必跑）
 
-`sidebars/` 目录被 `.gitignore` 排除（开发期产物），首次使用需自行准备：
+`sidebars/` 目录被 `.gitignore` 排除（开发期构建产物），新克隆后不存在，`kb build` 会因此 `FileNotFoundError`。首次使用一键拉取：
 
-- `element-plus-design-guide-sidebar.md` —— 17 篇设计/导航/安装/国际化/主题/暗黑模式/SSR 等文档
-- `element-plus-component-sidebar.md` —— 82 篇组件文档（Basic/Config/Form/Data/Navigation/Feedback/Others）
+```bash
+bash scripts/fetch-sidebars.sh            # 下载 + 写入 sidebars/*.md
+bash scripts/fetch-sidebars.sh --dry-run  # 离线验证（无网络）
+bash scripts/fetch-sidebars.sh --lang zh-CN --source github  # 指定语言/源
+```
 
-放置于仓库根 `sidebars/` 目录后，运行 `kb build` 构建知识库。
+脚本会生成 parser 期望的两个文件：
+
+- `element-plus-design-guide-sidebar.md` —— 设计/导航/安装/国际化/主题/暗黑模式/SSR 等文档
+- `element-plus-component-sidebar.md` —— 组件文档（Basic/Config/Form/Data/Navigation/Feedback/Others）
+
+数据源优先级（`--source auto` 默认）：① 抓取 element-plus.org 渲染后的侧边栏 HTML（标题最准）；② 回退到 GitHub Contents API 枚举 `docs/<lang>/{guide,component}/*.md`。两条路径都走 SSRF 守卫（host 白名单 + 内网 IP 阻断）。文档数量随官网更新而变化，不固定为历史快照的 17/82。生成后运行 `python3 -m scripts.kb.cli build` 重建知识库。
 
 ## config.json 配置
 
 仓库根 `config.json` 是 kb 子命令的唯一配置源。
 
-| 字段 | 默认值 | 说明 |
-| ---- | ------ | ---- |
-| `embed_model` | `sentence-transformers/paraphrase-MiniLM-L3-v2` | 嵌入模型（本地 ST / `openai://` 云端） |
-| `embed_dim` | `384` | 嵌入维度（必须匹配模型） |
-| `embed_source` | `modelscope` | 模型下载源（`modelscope` / `''` HF） |
-| `embed_base_url` | `""` | 云端 OpenAI 兼容 base_url |
-| `embed_api_key` | `""` | 云端 API key |
-| `rerank_model` | `flashrank` | 重排模型（`flashrank` / `openai://…`） |
-| `rerank_source` | `local` | 重排模型源 |
-| `db_path` | `data/element-plus.qdrant` | Qdrant 本地库路径 |
-| `collection` | `element_plus_docs` | Qdrant 集合名 |
-| `sidebars_dir` | `sidebars` | sidebar 解析目录 |
-| `site_base` | `https://element-plus.org` | 文档站点基址 |
-| `context_ttl_days` | `30` | C1: context 缓存 TTL（天），过期后 fetch 校验 hash |
-| `query.default_top_k` | `5` | 默认返回 top-k |
-| `query.bm25_weight` | `0.3` | BM25 融合权重 |
-| `query.vector_weight` | `0.7` | 向量融合权重 |
+| 字段                  | 默认值                                          | 说明                                               |
+| --------------------- | ----------------------------------------------- | -------------------------------------------------- |
+| `embed_model`         | `sentence-transformers/paraphrase-MiniLM-L3-v2` | 嵌入模型（本地 ST / `openai://` 云端）             |
+| `embed_dim`           | `384`                                           | 嵌入维度（必须匹配模型）                           |
+| `embed_source`        | `modelscope`                                    | 模型下载源（`modelscope` / `''` HF）               |
+| `embed_base_url`      | `""`                                            | 云端 OpenAI 兼容 base_url                          |
+| `embed_api_key`       | `""`                                            | 云端 API key                                       |
+| `rerank_model`        | `flashrank`                                     | 重排模型（`flashrank` / `openai://…`）             |
+| `rerank_source`       | `local`                                         | 重排模型源                                         |
+| `db_path`             | `data/element-plus.qdrant`                      | Qdrant 本地库路径                                  |
+| `collection`          | `element_plus_docs`                             | Qdrant 集合名                                      |
+| `sidebars_dir`        | `sidebars`                                      | sidebar 解析目录                                   |
+| `site_base`           | `https://element-plus.org`                      | 文档站点基址                                       |
+| `context_ttl_days`    | `30`                                            | C1: context 缓存 TTL（天），过期后 fetch 校验 hash |
+| `query.default_top_k` | `5`                                             | 默认返回 top-k                                     |
+| `query.bm25_weight`   | `0.3`                                           | BM25 融合权重                                      |
+| `query.vector_weight` | `0.7`                                           | 向量融合权重                                       |
 
 ## 预构建知识库
 
@@ -141,10 +149,10 @@ python3 -m scripts.fetcher.fetch https://element-plus.org/zh-CN/component/button
 
 ## 文档分类
 
-| doc_type | 来源 sidebar | 文档数 | 内容 |
-| -------- | ------------ | ------ | ---- |
-| `design-guide` | element-plus-design-guide-sidebar.md | 17 | 设计/导航/安装/快速开始/国际化/升级/主题/暗黑模式/SSR/过渡动画等 |
-| `component` | element-plus-component-sidebar.md | 82 | Basic(12) + Config(1) + Form(25) + Data(23) + Navigation(9) + Feedback(10) + Others(2) |
+| doc_type       | 来源 sidebar                         | 文档数 | 内容                                                                                   |
+| -------------- | ------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
+| `design-guide` | element-plus-design-guide-sidebar.md | 17     | 设计/导航/安装/快速开始/国际化/升级/主题/暗黑模式/SSR/过渡动画等                       |
+| `component`    | element-plus-component-sidebar.md    | 82     | Basic(12) + Config(1) + Form(25) + Data(23) + Navigation(9) + Feedback(10) + Others(2) |
 
 ## 仓库结构
 
@@ -160,7 +168,9 @@ element-dev/
 │   └── element-plus-component-sidebar.md
 └── scripts/
     ├── kb/                           # 知识库模块 + tests/ + build_db.py
-    └── fetcher/                      # _http.py + fetch.py
+    ├── fetcher/                      # _http.py（含 SSRF 守卫）+ fetch.py
+    ├── fetch-sidebars.py             # 下载 sidebars/*.md（站点抓取 / GitHub 兜底）
+    └── fetch-sidebars.sh             # 上面的 bash 入口（首次使用必跑）
 ```
 
 ## 测试

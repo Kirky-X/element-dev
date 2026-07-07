@@ -12,6 +12,7 @@ Flow:
   6. (optional) flashrank rerank over the fused top_k
   7. return top_k docs, each annotated with needs_description (D6 lazy backfill flag)
 """
+
 from __future__ import annotations
 
 import re
@@ -39,15 +40,15 @@ def _is_cjk(ch: str) -> bool:
     cp = ord(ch)
     # CJK Unified Ideographs + extensions A/B/C/D/E/F + CJK punctuation
     return (
-        0x4E00 <= cp <= 0x9FFF      # CJK Unified Ideographs
-        or 0x3400 <= cp <= 0x4DBF   # CJK Extension A
+        0x4E00 <= cp <= 0x9FFF  # CJK Unified Ideographs
+        or 0x3400 <= cp <= 0x4DBF  # CJK Extension A
         or 0x20000 <= cp <= 0x2A6DF  # CJK Extension B
         or 0x2A700 <= cp <= 0x2B73F  # CJK Extension C
         or 0x2B740 <= cp <= 0x2B81F  # CJK Extension D
         or 0x2B820 <= cp <= 0x2CEAF  # CJK Extension E
         or 0x2CEB0 <= cp <= 0x2EBEF  # CJK Extension F
-        or 0x3000 <= cp <= 0x303F    # CJK Symbols and Punctuation
-        or 0xFF00 <= cp <= 0xFFEF    # Halfwidth/Fullwidth Forms
+        or 0x3000 <= cp <= 0x303F  # CJK Symbols and Punctuation
+        or 0xFF00 <= cp <= 0xFFEF  # Halfwidth/Fullwidth Forms
     )
 
 
@@ -70,7 +71,7 @@ def _tokenize(text: str) -> list[str]:
     pos = 0
     for m in _ASCII_WORD_RE.finditer(text):
         # gap before this ASCII word — scan for CJK
-        for ch in text[pos:m.start()]:
+        for ch in text[pos : m.start()]:
             if _is_cjk(ch):
                 tokens.append(ch)
         tokens.append(m.group())
@@ -102,7 +103,55 @@ def _check_model_compatibility(indexer: Any, embedder: Any) -> None:
     enforce the same rule from one source of truth.
     """
     from .model_compat import assert_compatible
+
     assert_compatible(indexer, embedder, context="query")
+
+
+def _context7_fallback(question: str, doc_type: Optional[str]) -> list[dict[str, Any]]:
+    """P0 context7 fallback: emit a transparent signal when the local KB misses.
+
+    The local Qdrant KB is a prebuilt snapshot (99 docs, embed_model stamped at
+    build time). It will miss on (a) new Element Plus components released after
+    the last build, (b) recent API/props changes, (c) topics outside the
+    indexed doc set. context7 MCP serves live, version-pinned Element Plus
+    docs and is the correct escalation path.
+
+    This helper returns a single clearly-labeled marker result (NOT fabricated
+    content — there is no invented text, only an instruction + the canonical
+    library id). The agent (Claude) reading the CLI output invokes the
+    context7 MCP tools (`mcp__..._context7__resolve-library-id` then
+    `query-docs`) to fetch real, current docs.
+
+    `query.py` is a library layer with no MCP access, so we cannot call
+    context7 directly here; we hand the agent a machine-readable directive.
+    See SKILL.md "kb query 失败兜底" for the agent-side flow.
+    """
+    return [
+        {
+            "id": "context7-fallback",
+            "title": "[context7 fallback] local KB miss — escalate to context7 MCP",
+            "url": "https://element-plus.org",
+            "description": (
+                "本地知识库无匹配。该条目为兜底信号，非真实文档内容。"
+                "请 agent 调用 context7 MCP 获取最新 Element Plus API。"
+            ),
+            "doc_type": doc_type or "fallback",
+            "score": 0.0,
+            "needs_description": False,
+            "fallback": True,
+            "source": "context7",
+            "context7_library_id": "/element-plus/element-plus",
+            "context7_search_query": "element-plus",
+            "context7_instruction": (
+                "KB query miss — call context7 MCP:\n"
+                "  1. mcp__..._context7__resolve-library-id(libraryName='element-plus')\n"
+                "  2. mcp__..._context7__query-docs(\n"
+                "       libraryId='/element-plus/element-plus',\n"
+                f"       query={question!r})\n"
+                "Then answer the user from the returned docs and cite them."
+            ),
+        }
+    ]
 
 
 def query(
@@ -118,6 +167,11 @@ def query(
     """Hybrid vector+BM25 search. Returns at most `top_k` results.
 
     B5: raises ValueError if embedder.model_name doesn't match the DB.
+
+    P0 context7 fallback: if the local KB yields zero candidates, returns a
+    single labeled marker (``fallback=True``, ``source='context7'``) directing
+    the caller to the context7 MCP for live Element Plus docs. The marker is
+    a signal, not fabricated content.
     """
     _check_model_compatibility(indexer, embedder)
 
@@ -127,7 +181,8 @@ def query(
     cand_k = max(top_k * 3, top_k)
     candidates = indexer.search(qvec, top_k=cand_k, doc_type=doc_type)
     if not candidates:
-        return []
+        # P0 context7 fallback — local KB miss; escalate to live docs.
+        return _context7_fallback(question, doc_type)
 
     # 2. BM25 keyword scoring over the same candidate pool.
     from rank_bm25 import BM25Okapi
@@ -186,8 +241,7 @@ def _rerank(question: str, results: list[dict[str, Any]]) -> list[dict[str, Any]
         return results
     ranker = RankModel()
     passages = [
-        {"id": r["id"], "text": f"{r['title']} {r['description']}"}
-        for r in results
+        {"id": r["id"], "text": f"{r['title']} {r['description']}"} for r in results
     ]
     reranked = ranker.rerank(question, passages)
     id_to_doc = {r["id"]: r for r in results}

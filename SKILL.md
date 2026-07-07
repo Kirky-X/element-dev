@@ -1,6 +1,6 @@
 ---
 name: element-dev
-description: "Element Plus 开发技能（3 子命令：kb/fetch/config）。触发：Element Plus/Element Plus 组件/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI 库/element-plus.org 文档查询/组件用法/Props/Events/Slots"
+description: "Element Plus 开发技能。触发：Element Plus/Element Plus 组件/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI 库/element-plus.org 文档查询/组件用法/Props/Events/Slots"
 license: MIT
 ---
 

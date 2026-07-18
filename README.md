@@ -1,194 +1,194 @@
-# ELEMENT-DEV —— Element Plus 开发技能
+# ELEMENT-DEV — Element Plus Development Skill
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
 
-element-dev 是一个面向 AI agent 的 Vue 3 + Element Plus 组件库开发 skill。它聚合 3 个子命令，覆盖 Element Plus 文档检索与知识管理：**kb**（本地 Qdrant 知识库）+ **fetch**（在线抓取 element-plus.org）+ **config**（配置管理）。
+element-dev is a Vue 3 + Element Plus component library development skill for AI agents. It aggregates 3 subcommands covering Element Plus document retrieval and knowledge management: **kb** (local Qdrant knowledge base) + **fetch** (online scraping of element-plus.org) + **config** (configuration management).
 
-## 3 个子命令速览
+## 3 Subcommands at a Glance
 
-| 子命令   | 一句话功能                                                                | 主要脚本                           |
+| Subcommand | One-line description | Primary scripts |
 | -------- | ------------------------------------------------------------------------- | ---------------------------------- |
-| `kb`     | 本地 Qdrant 知识库：9 子动作（query/build/reindex/merge/link-auto/…）     | `scripts/kb/*.py` + 预构建库       |
-| `fetch`  | 直接 HTTP GET 抓取 element-plus.org 静态文档页，提取 `<main>` 转 Markdown | `scripts/fetcher/{_http,fetch}.py` |
-| `config` | 显示/修改 embed_model、rerank_model、db_path、context_ttl_days 等配置项   | `scripts/kb/config.py`             |
+| `kb`     | Local Qdrant knowledge base: 9 sub-actions (query/build/reindex/merge/link-auto/…) | `scripts/kb/*.py` + prebuilt library |
+| `fetch`  | Direct HTTP GET scraping of element-plus.org static doc pages, extracting `<main>` to Markdown | `scripts/fetcher/{_http,fetch}.py` |
+| `config` | View/modify embed_model, rerank_model, db_path, context_ttl_days and other config items | `scripts/kb/config.py` |
 
-子命令路由表、触发词、各子动作完整流程见 [SKILL.md](SKILL.md)。
+Subcommand routing table, trigger words, and complete sub-action flows are in [SKILL.md](SKILL.md).
 
-## 与 hap-dev 的差异
+## Differences from hap-dev
 
-| 维度         | hap-dev                                        | element-dev                                      |
+| Dimension | hap-dev | element-dev |
 | ------------ | ---------------------------------------------- | ------------------------------------------------ |
-| 文档源       | HarmonyOS 搜索 API（POST + 多 catalog 路由）   | element-plus.org 静态站点（HTTP GET）            |
-| 在线模块     | `scripts/search/{search.py, detail.py}` 双端点 | `scripts/fetcher/fetch.py` 单一 GET              |
-| Sidebar 格式 | `#### N.N [title](url)`                        | `### N.N[.] [title](url)`（3 hashes + 可选尾点） |
-| 文档数       | 964（9 类）                                    | 99（2 类：design-guide + component）             |
-| KB 模块      | 领域无关                                       | 同 hap-dev（B1-B13 修复全部继承）                |
+| Doc source | HarmonyOS Search API (POST + multi-catalog routing) | element-plus.org static site (HTTP GET) |
+| Online module | `scripts/search/{search.py, detail.py}` dual endpoints | `scripts/fetcher/fetch.py` single GET |
+| Sidebar format | `#### N.N [title](url)` | `### N.N[.] [title](url)` (3 hashes + optional trailing period) |
+| Doc count | 964 (9 categories) | 99 (2 categories: design-guide + component) |
+| KB module | Domain-agnostic | Same as hap-dev (B1-B13 fixes all inherited) |
 
-## 安装
+## Installation
 
-### Python 依赖
+### Python Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-依赖清单：
+Dependency list:
 
-- **必需**：`qdrant-client`、`rank-bm25`、`httpx`、`sentence-transformers`、`modelscope`
-- **可选**：`flashrank`（重排）、`openai`（云端嵌入模型）
+- **Required**: `qdrant-client`, `rank-bm25`, `httpx`, `sentence-transformers`, `modelscope`
+- **Optional**: `flashrank` (reranking), `openai` (cloud embedding models)
 
-### sidebars 目录（首次使用必跑）
+### sidebars Directory (must run on first use)
 
-`sidebars/` 目录被 `.gitignore` 排除（开发期构建产物），新克隆后不存在，`kb build` 会因此 `FileNotFoundError`。首次使用一键拉取：
+The `sidebars/` directory is excluded by `.gitignore` (dev-time build artifacts), so it doesn't exist after a fresh clone. `kb build` will raise `FileNotFoundError` because of this. First-time setup:
 
 ```bash
-bash scripts/fetch-sidebars.sh            # 下载 + 写入 sidebars/*.md
-bash scripts/fetch-sidebars.sh --dry-run  # 离线验证（无网络）
-bash scripts/fetch-sidebars.sh --lang zh-CN --source github  # 指定语言/源
+bash scripts/fetch-sidebars.sh            # download + write sidebars/*.md
+bash scripts/fetch-sidebars.sh --dry-run  # offline verification (no network)
+bash scripts/fetch-sidebars.sh --lang zh-CN --source github  # specify language/source
 ```
 
-脚本会生成 parser 期望的两个文件：
+The script generates the two files expected by the parser:
 
-- `element-plus-design-guide-sidebar.md` —— 设计/导航/安装/国际化/主题/暗黑模式/SSR 等文档
-- `element-plus-component-sidebar.md` —— 组件文档（Basic/Config/Form/Data/Navigation/Feedback/Others）
+- `element-plus-design-guide-sidebar.md` — design/navigation/installation/i18n/theme/dark-mode/SSR documentation
+- `element-plus-component-sidebar.md` — component documentation (Basic/Config/Form/Data/Navigation/Feedback/Others)
 
-数据源优先级（`--source auto` 默认）：① 抓取 element-plus.org 渲染后的侧边栏 HTML（标题最准）；② 回退到 GitHub Contents API 枚举 `docs/<lang>/{guide,component}/*.md`。两条路径都走 SSRF 守卫（host 白名单 + 内网 IP 阻断）。文档数量随官网更新而变化，不固定为历史快照的 17/82。生成后运行 `python3 -m scripts.kb.cli build` 重建知识库。
+Data source priority (`--source auto` by default): 1) scrape element-plus.org rendered sidebar HTML (most accurate titles); 2) fall back to GitHub Contents API enumerating `docs/<lang>/{guide,component}/*.md`. Both paths go through SSRF guard (host whitelist + internal IP blocking). Document counts change with official site updates and are not fixed to the historical snapshot of 17/82. After generation, run `python3 -m scripts.kb.cli build` to rebuild the knowledge base.
 
-## config.json 配置
+## config.json Configuration
 
-仓库根 `config.json` 是 kb 子命令的唯一配置源。
+The repo root `config.json` is the single configuration source for the kb subcommand.
 
-| 字段                  | 默认值                                          | 说明                                               |
+| Field | Default value | Description |
 | --------------------- | ----------------------------------------------- | -------------------------------------------------- |
-| `embed_model`         | `sentence-transformers/paraphrase-MiniLM-L3-v2` | 嵌入模型（本地 ST / `openai://` 云端）             |
-| `embed_dim`           | `384`                                           | 嵌入维度（必须匹配模型）                           |
-| `embed_source`        | `modelscope`                                    | 模型下载源（`modelscope` / `''` HF）               |
-| `embed_base_url`      | `""`                                            | 云端 OpenAI 兼容 base_url                          |
-| `embed_api_key`       | `""`                                            | 云端 API key                                       |
-| `rerank_model`        | `flashrank`                                     | 重排模型（`flashrank` / `openai://…`）             |
-| `rerank_source`       | `local`                                         | 重排模型源                                         |
-| `db_path`             | `data/element-plus.qdrant`                      | Qdrant 本地库路径                                  |
-| `collection`          | `element_plus_docs`                             | Qdrant 集合名                                      |
-| `sidebars_dir`        | `sidebars`                                      | sidebar 解析目录                                   |
-| `site_base`           | `https://element-plus.org`                      | 文档站点基址                                       |
-| `context_ttl_days`    | `30`                                            | C1: context 缓存 TTL（天），过期后 fetch 校验 hash |
-| `query.default_top_k` | `5`                                             | 默认返回 top-k                                     |
-| `query.bm25_weight`   | `0.3`                                           | BM25 融合权重                                      |
-| `query.vector_weight` | `0.7`                                           | 向量融合权重                                       |
+| `embed_model` | `sentence-transformers/paraphrase-MiniLM-L3-v2` | Embedding model (local ST / `openai://` cloud) |
+| `embed_dim` | `384` | Embedding dimension (must match model) |
+| `embed_source` | `modelscope` | Model download source (`modelscope` / `''` HF) |
+| `embed_base_url` | `""` | Cloud OpenAI-compatible base_url |
+| `embed_api_key` | `""` | Cloud API key |
+| `rerank_model` | `flashrank` | Rerank model (`flashrank` / `openai://…`) |
+| `rerank_source` | `local` | Rerank model source |
+| `db_path` | `data/element-plus.qdrant` | Qdrant local library path |
+| `collection` | `element_plus_docs` | Qdrant collection name |
+| `sidebars_dir` | `sidebars` | Sidebar parsing directory |
+| `site_base` | `https://element-plus.org` | Doc site base URL |
+| `context_ttl_days` | `30` | C1: context cache TTL (days), fetch verifies hash after expiry |
+| `query.default_top_k` | `5` | Default top-k results |
+| `query.bm25_weight` | `0.3` | BM25 fusion weight |
+| `query.vector_weight` | `0.7` | Vector fusion weight |
 
-## 预构建知识库
+## Prebuilt Knowledge Base
 
-仓库附带预构建的 `data/element-plus.qdrant/`（本地 Qdrant 持久化目录），由默认嵌入模型生成，开箱即用：
+The repo includes a prebuilt `data/element-plus.qdrant/` (local Qdrant persistence directory), generated with the default embedding model and ready to use:
 
-- **99 条向量**覆盖 2 个文档类型（17 design-guide + 82 component）
-- 直接运行 `python3 -m scripts.kb.cli query --question "ElTable 虚拟滚动"` 即可查询
+- **99 vectors** covering 2 document types (17 design-guide + 82 component)
+- Run `python3 -m scripts.kb.cli query --question "ElTable virtual scrolling"` to query directly
 
-### 一键重建 / 切换模型后重索引
+### One-click Rebuild / Re-index After Model Switch
 
 ```bash
-# 完全重建（从 sidebars/ 重新解析、重新嵌入）
+# Full rebuild (re-parse from sidebars/, re-embed)
 python3 scripts/kb/build_db.py
 
-# 仅重嵌入（content_hash 变化或 description 回填的文档）
+# Re-embed only (docs with changed content_hash or description backfill)
 python3 -m scripts.kb.cli reindex
 
-# 强制全量重嵌入（切换 embed_model 后必跑）
+# Force full re-embed (required after switching embed_model)
 python3 -m scripts.kb.cli reindex --force
 ```
 
-切换 `embed_model` 的标准流程：
+Standard workflow for switching `embed_model`:
 
-1. 编辑 `config.json` 修改 `embed_model` / `embed_dim` / `embed_source`
-2. 运行 `python3 scripts/kb/build_db.py`（全量重建）
-3. 验证查询：`python3 -m scripts.kb.cli query --question "测试"`
+1. Edit `config.json` to change `embed_model` / `embed_dim` / `embed_source`
+2. Run `python3 scripts/kb/build_db.py` (full rebuild)
+3. Verify query: `python3 -m scripts.kb.cli query --question "test"`
 
-## kb 子命令完整动作
+## kb Subcommand Full Actions
 
 ```bash
-# 混合检索（向量 0.7 + BM25 0.3，可选 FlashRank 重排）
-python3 -m scripts.kb.cli query --question "ElTable 虚拟滚动" --top-k 5
+# Hybrid search (vector 0.7 + BM25 0.3, optional FlashRank reranking)
+python3 -m scripts.kb.cli query --question "ElTable virtual scrolling" --top-k 5
 
-# 全量构建
+# Full build
 python3 -m scripts.kb.cli build
 
-# 增量重建（仅 content_hash 变化）/ 强制全量
+# Incremental rebuild (only changed content_hash) / force full
 python3 -m scripts.kb.cli reindex
 python3 -m scripts.kb.cli reindex --force
 
-# 余弦 >0.9 自动双向链接
+# Cosine >0.9 automatic bidirectional linking
 python3 -m scripts.kb.cli link-auto --threshold 0.9 --max-per-doc 10
 
-# 描述回填 + 向量重算
+# Description backfill + vector recomputation
 python3 -m scripts.kb.cli update-description --id <doc_id> --description "..."
 
-# 手动双向链接
-python3 -m scripts.kb.cli update-links --id <doc_id> --content "<markdown with 相关推荐>"
+# Manual bidirectional linking
+python3 -m scripts.kb.cli update-links --id <doc_id> --content "<markdown with related recommendations>"
 
-# 模型迁移（回填 embed_model 字段）
+# Model migration (backfill embed_model field)
 python3 -m scripts.kb.cli migrate-embed-model --model <model_name>
 
-# 合并两个 DB（入口校验 embed_model 一致）
+# Merge two DBs (entry validates embed_model consistency)
 python3 -m scripts.kb.cli merge --db-a <path_a> --db-b <path_b> --out <out_path>
 
-# 抓取 URL + 智能更新（C1 三层缓存：cached/refreshed/updated）
+# Fetch URL + smart update (C1 three-layer cache: cached/refreshed/updated)
 python3 -m scripts.kb.cli fetch-update --id <doc_id> [--force] [--ttl-days 7]
 
-# 配置管理
+# Configuration management
 python3 -m scripts.kb.cli config
 python3 -m scripts.kb.cli config --key embed_model --value sentence-transformers/all-MiniLM-L6-v2
 ```
 
-## fetch 子命令
+## fetch Subcommand
 
 ```bash
-# 抓取单个文档页（提取 <main> 内容，清洗 Cloudflare email-protection artifacts）
+# Fetch a single doc page (extract <main> content, clean Cloudflare email-protection artifacts)
 python3 -m scripts.fetcher.fetch https://element-plus.org/zh-CN/component/button
 ```
 
-返回 `{title, url, content}`，content 为 Markdown 格式。
+Returns `{title, url, content}`, where content is in Markdown format.
 
-## 文档分类
+## Document Classification
 
-| doc_type       | 来源 sidebar                         | 文档数 | 内容                                                                                   |
+| doc_type | Source sidebar | Doc count | Content |
 | -------------- | ------------------------------------ | ------ | -------------------------------------------------------------------------------------- |
-| `design-guide` | element-plus-design-guide-sidebar.md | 17     | 设计/导航/安装/快速开始/国际化/升级/主题/暗黑模式/SSR/过渡动画等                       |
-| `component`    | element-plus-component-sidebar.md    | 82     | Basic(12) + Config(1) + Form(25) + Data(23) + Navigation(9) + Feedback(10) + Others(2) |
+| `design-guide` | element-plus-design-guide-sidebar.md | 17 | design/navigation/installation/quickstart/i18n/upgrades/theme/dark-mode/SSR/transitions etc. |
+| `component` | element-plus-component-sidebar.md | 82 | Basic(12) + Config(1) + Form(25) + Data(23) + Navigation(9) + Feedback(10) + Others(2) |
 
-## 仓库结构
+## Repository Structure
 
 ```
 element-dev/
-├── SKILL.md                          # 3 子命令路由器 + 通用规则
-├── config.json                       # kb 配置（模型/库/端点）
-├── requirements.txt                  # Python 依赖
+├── SKILL.md                          # 3 subcommand router + general rules
+├── config.json                       # kb config (model/library/endpoint)
+├── requirements.txt                  # Python dependencies
 ├── data/
-│   └── element-plus.qdrant/          # 预构建 Qdrant 本地库
-├── sidebars/                         # sidebar 文件（gitignore，需自行准备）
+│   └── element-plus.qdrant/          # prebuilt Qdrant local library
+├── sidebars/                         # sidebar files (gitignore, must prepare yourself)
 │   ├── element-plus-design-guide-sidebar.md
 │   └── element-plus-component-sidebar.md
 └── scripts/
-    ├── kb/                           # 知识库模块 + tests/ + build_db.py
-    ├── fetcher/                      # _http.py（含 SSRF 守卫）+ fetch.py
-    ├── fetch-sidebars.py             # 下载 sidebars/*.md（站点抓取 / GitHub 兜底）
-    └── fetch-sidebars.sh             # 上面的 bash 入口（首次使用必跑）
+    ├── kb/                           # knowledge base module + tests/ + build_db.py
+    ├── fetcher/                      # _http.py (with SSRF guard) + fetch.py
+    ├── fetch-sidebars.py             # download sidebars/*.md (site scraping / GitHub fallback)
+    └── fetch-sidebars.sh             # bash entry point for above (must run on first use)
 ```
 
-## 测试
+## Testing
 
 ```bash
 python3 -m pytest scripts/ -v
 ```
 
-测试使用 `FakeEmbedder`（SHA1 派生的确定性向量）替代真实模型下载，确保离线可运行。
+Tests use `FakeEmbedder` (SHA1-derived deterministic vectors) instead of real model downloads, ensuring offline operation.
 
-## 禁止事项
+## Prohibitions
 
-1. **禁止跨模型向量空间混用** —— 向量身份 = (model_name, dim, source, version)，build/merge/query 入口 MUST 校验
-2. **禁止单方向链接** —— links 是双向契约
-3. **禁止吞掉错误** —— 错误必须显式抛出或返回
-4. **禁止 set_payload 写白名单外字段** —— 防止 schema 污染
-5. **禁止混淆 content_hash 与 context_hash** —— 前者检测元数据变更，后者检测网页内容变更
-6. **禁止 fetch 时不清洗 Cloudflare artifacts** —— 否则 context_hash 永远不稳定
+1. **No cross-model vector space mixing** — vector identity = (model_name, dim, source, version), build/merge/query entry points MUST validate
+2. **No unidirectional links** — links are a bidirectional contract
+3. **No swallowing errors** — errors must be explicitly raised or returned
+4. **No set_payload writes outside the whitelist** — prevents schema pollution
+5. **No confusing content_hash with context_hash** — the former detects metadata changes, the latter detects webpage content changes
+6. **No fetching without cleaning Cloudflare artifacts** — otherwise context_hash is permanently unstable
 
 ## License
 

@@ -5,7 +5,7 @@ reindex(indexer, embedder, force=False) -> int
 Implements design D9 (simplified per spec), with B6 auto-force upgrade:
 
 * force=True  -> re-embed EVERY stored doc.
-* force=False -> "content_hash 比对" + "embed_model 比对":
+* force=False -> "content_hash comparison" + "embed_model comparison":
     - if the embedder's model_name differs from any stored doc's embed_model
       -> auto-upgrade to force=True (B6: model changed, all vectors stale)
     - else for each stored doc, recompute content_hash from its current

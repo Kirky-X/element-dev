@@ -9,7 +9,7 @@ Parses Element Plus sidebar `.md` files into doc records. Each line of the form
 markdown link ) is one doc record.
 
 Lines whose `###` heading has plain text only (no `[title](url)` link) are NOT
-doc records — they are category headers (e.g. `## 2. Basic 基础组件`).
+doc records — they are category headers (e.g. `## 2. Basic Components`).
 
 Differs from hap-dev's parser because Element Plus sidebars use 3 hashes (not 4)
 and the component sidebar uses a trailing period after the section number
@@ -33,7 +33,7 @@ SIDEBAR_FILE_MAP: dict[str, str] = {
     "element-plus-component-sidebar.md": "component",
 }
 
-NO_DESCRIPTION = "无描述"
+NO_DESCRIPTION = "No description"
 NO_CONTEXT = ""  # empty string = context not yet fetched
 
 

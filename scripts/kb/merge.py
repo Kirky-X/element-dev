@@ -8,7 +8,7 @@ upgraded to include description+links):
   * read all records from both DBs, align by id
   * B3: validate both DBs were built with the SAME embed_model. A vector's
     identity is (model_name, dim) — same dim alone is insufficient. If the
-    DBs used different models, raise ValueError (Rule 7: 暴露冲突不折中) —
+    DBs used different models, raise ValueError (Rule 7: expose conflicts, don't compromise) —
     do NOT silently produce a corrupted DB with mixed vector spaces.
   * field-level merge:
       - one side empty / default, other not      -> take the non-empty one

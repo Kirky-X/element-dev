@@ -5,12 +5,12 @@ auto_link(indexer, threshold=0.9, max_per_doc=10) -> dict
 First-Principles fact F3: links semantics = "document relatedness". Two
 kinds of links coexist:
 
-  - explicit (from "相关推荐" blocks) — handled by links.py
+  - explicit (from "Related Recommendations" blocks) — handled by links.py
   - implicit (from vector similarity) — handled by this module
 
 User requirement: docs whose cosine similarity > 0.9 must be auto-linked
 bidirectionally. The current DB ships with all 964 docs having links=[]
-because links.py only extracts from "相关推荐" sections, which most docs lack.
+because links.py only extracts from "Related Recommendations" sections, which most docs lack.
 
 Design:
 

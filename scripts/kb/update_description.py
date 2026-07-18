@@ -1,6 +1,6 @@
 """Description backfill (tasks 4.12-4.13).
 
-Implements design D6: when a query hits a doc whose description is still "无描述",
+Implements design D6: when a query hits a doc whose description is still "No description",
 the agent fetches the doc body, generates a description, and calls this function
 to backfill it. Backfilling MUST recompute the embedding from the new description
 (per D2: description backfill switches the embedding source from title to desc).
@@ -26,7 +26,7 @@ def update_description(
 
     B13: MUST recompute content_hash after changing description — B4 added
     description to the content_hash formula, so a stale hash here would leave
-    the doc in an inconsistent state (content_hash field says "无描述" but the
+    the doc in an inconsistent state (content_hash field says "No description" but the
     actual description is the backfilled text). A subsequent reindex would see
     the mismatch and needlessly re-embed (wasting compute) even though the
     vector is already current. Worse, any audit log reading content_hash to
@@ -53,7 +53,7 @@ def update_description(
     assert_compatible(indexer, embedder, context="update_description")
 
     # indexer.upsert recomputes the vector from `description` (since it now !=
-    # "无描述"), overwriting both the vector and the payload's description +
+    # "No description"), overwriting both the vector and the payload's description +
     # updated_at + content_hash fields in one shot.
     indexer.upsert(doc, embedder)
     return doc

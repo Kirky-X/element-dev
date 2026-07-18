@@ -1,6 +1,6 @@
 """Bidirectional link extraction from doc content (tasks 4.10-4.11).
 
-Parses a "相关推荐" / "相关文档" / "Related" section from a markdown body,
+Parses a "Related Recommendations" / "Related Documents" / "Related" section from a markdown body,
 extracts referenced URLs (markdown links, <a href>, bare URLs), maps each URL to
 its sha1 doc id, and writes the link bidirectionally:
 
@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-RELATED_HEADING_RE = re.compile(r"^#{1,6}\s+.*(相关推荐|相关文档|Related)", re.IGNORECASE)
+RELATED_HEADING_RE = re.compile(r"^#{1,6}\s+.*(Related Recommendations|Related Documents|Related)", re.IGNORECASE)
 HEADING_RE = re.compile(r"^#{1,6}\s")
 MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]+)\)")
 HTML_A_RE = re.compile(r"""<a\s+[^>]*?href=["']([^"']+)["']""", re.IGNORECASE)
@@ -34,7 +34,7 @@ def _url_to_id(url: str) -> str:
 
 
 def _extract_related_block(content: str) -> str | None:
-    """Return the text of the 相关推荐 block, or None if no such heading.
+    """Return the text of the related recommendations block, or None if no such heading.
 
     The block starts at the matching heading and ends at the next heading of any
     level or at EOF.

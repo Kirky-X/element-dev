@@ -124,7 +124,7 @@ def _context7_fallback(question: str, doc_type: Optional[str]) -> list[dict[str,
 
     `query.py` is a library layer with no MCP access, so we cannot call
     context7 directly here; we hand the agent a machine-readable directive.
-    See SKILL.md "kb query 失败兜底" for the agent-side flow.
+    See SKILL.md "kb query failure fallback" for the agent-side flow.
     """
     return [
         {
@@ -132,8 +132,8 @@ def _context7_fallback(question: str, doc_type: Optional[str]) -> list[dict[str,
             "title": "[context7 fallback] local KB miss — escalate to context7 MCP",
             "url": "https://element-plus.org",
             "description": (
-                "本地知识库无匹配。该条目为兜底信号，非真实文档内容。"
-                "请 agent 调用 context7 MCP 获取最新 Element Plus API。"
+                "No match in local knowledge base. This entry is a fallback signal, not real document content. "
+                "Please have the agent call context7 MCP to get the latest Element Plus API."
             ),
             "doc_type": doc_type or "fallback",
             "score": 0.0,

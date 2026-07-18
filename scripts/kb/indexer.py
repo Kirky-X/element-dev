@@ -2,7 +2,7 @@
 
 Stores the 9-field doc schema in a local Qdrant collection. The payload holds all
 non-vector fields; the vector is computed from `description` when it has been
-backfilled (i.e. != "无描述"), otherwise from `title` (per design D2).
+backfilled (i.e. != "No description"), otherwise from `title` (per design D2).
 
 Point ids are stable unsigned 64-bit ints derived from the doc's sha1 id, so
 repeated `build` / `upsert` calls are idempotent (same id -> overwrite).

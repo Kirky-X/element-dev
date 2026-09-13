@@ -1,4 +1,4 @@
-# ELEMENT-DEV — Element Plus Development Skill
+# element-dev — Element Plus Development Skill
 
 > Vue 3 + Element Plus component-library development assistance: three entries — local Qdrant knowledge base (kb), element-plus.org online fetching (fetch), and config management (config) — answering "how to use a component / how to configure Props". Design-to-Element-Plus code generation belongs to maliang; this skill only does documentation knowledge-base query and maintenance.
 

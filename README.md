@@ -1,4 +1,4 @@
-# ELEMENT-DEV — Element Plus 开发技能
+# element-dev — Element Plus 开发技能
 
 > Vue 3 + Element Plus 组件库开发辅助：本地 Qdrant 知识库（kb）、element-plus.org 在线抓取（fetch）、配置管理（config）三个入口，回答"组件怎么用/Props 怎么配"。设计稿 → Element Plus 代码生成用 maliang，本 skill 只做文档知识库查询与维护。
 

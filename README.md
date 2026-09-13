@@ -32,6 +32,8 @@ bash scripts/sync-skills.sh element-dev
 # 首跑前置：安装 Python 依赖
 pip install -r requirements.txt   # 必需: qdrant-client/rank-bm25/httpx/sentence-transformers/modelscope
                                   # 可选: flashrank(重排) / openai(云端嵌入)
+# 方式三：远程安装（GitHub 仓库）
+npx skills add Kirky-X/element-dev --agent claude-code -y
 ```
 
 缺依赖时不会裸 traceback 崩溃，会显式提示安装命令或切换云端模型（`config --key embed_model --value openai://<model>`）。

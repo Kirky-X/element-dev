@@ -31,9 +31,9 @@ desktop.ini
 *.bak.*
 # Qdrant local DB backups (keep the main pre-built DB, exclude backups)
 data/*.qdrant.bak*/
-!data/harmonyos.qdrant/
-# Qdrant runtime lock file (transient — regenerated on each open)
-data/harmonyos.qdrant/.lock
+!data/element-plus.qdrant/
+# Qdrant runtime lock files (transient — regenerated on each open, any collection)
+data/*.qdrant/**/.lock
 # ModelScope cache
 .modelscope/
 # Test artifacts

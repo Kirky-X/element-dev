@@ -1,6 +1,6 @@
 ---
 name: element-dev
-description: "Element Plus development skill. Trigger: Element Plus/Element Plus components/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI library/element-plus.org documentation query/component usage/Props/Events/Slots"
+description: "Element Plus development skill. Trigger: Element Plus/Element Plus components/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI library/element-plus.org documentation query/component usage/Props/Events/Slots/组件用法/查组件文档/Element Plus 报错/组件属性怎么配. Boundary: design-to-Element Plus code generation belongs to maliang; this skill only does Element Plus documentation knowledge base queries."
 license: MIT
 ---
 
@@ -8,7 +8,9 @@ license: MIT
 
 Vue 3 + Element Plus component library development assistance skill. Three subcommands cover Element Plus document retrieval and knowledge management: **kb** (local knowledge base) + **fetch** (online scraping) + **config** (configuration management).
 
-- **kb** (local knowledge base) — Local Qdrant knowledge base, 2-category sidebar document classification (design-guide 17 docs + component 82 docs = 99 documents), vector embedding (default `paraphrase-MiniLM-L3-v2`, switchable between ModelScope/cloud) + BM25 keyword indexing + optional FlashRank reranking. 12-field schema (including C1 `context`/`context_hash`). Sub-actions: query/build/reindex/merge/update-description/update-links/link-auto/migrate-embed-model/fetch-update/config. Answers "**what can be found locally**".
+> **Boundary**: 设计稿 → Element Plus 代码生成用 maliang；本 skill 只做 Element Plus 文档知识库查询与知识库维护。
+
+- **kb** (local knowledge base) — Local Qdrant knowledge base, 2-category sidebar document classification (design-guide 17 docs + component 82 docs = 99 documents), vector embedding (default `paraphrase-MiniLM-L3-v2`, switchable between ModelScope/cloud) + BM25 keyword indexing + optional FlashRank reranking. 12-field schema (including C1 `context`/`context_hash`). Sub-actions: query/build/show/merge/reindex/update-description/update-links/link-auto/migrate-embed-model/fetch-update/config. Answers "**what can be found locally**".
 - **fetch** (online scraping) — Direct HTTP GET scraping of element-plus.org static doc pages, extracting `<main>` content and converting to Markdown, cleaning Cloudflare email-protection artifacts. Serves as a legitimate channel for kb description/links/context population. Answers "**what's available online**".
 - **config** (configuration) — View/modify embed_model, rerank_model, db_path, context_ttl_days and other config items. Answers "**how to switch**".
 
@@ -41,13 +43,15 @@ flowchart TD
 
 Local Qdrant knowledge base. 99 documents (17 design-guide + 82 component), vector embedding + BM25 + optional reranking.
 
-### kb query — Hybrid Search
+**How to run**: all commands below assume the skill root as cwd (`cd {SKILL_DIR}` first). From any other directory (e.g. a user's Vue project), call the CLI by absolute path — it works without `python3 -m` because `cli.py` supports direct invocation and always locates `config.json`/`data/` relative to the skill root, not the cwd:
 
 ```bash
-python3 -m scripts.kb.cli query --question "ElTable virtual scrolling" --top-k 5
+cd {SKILL_DIR} && python3 -m scripts.kb.cli query --question "ElTable virtual scrolling" --top-k 5
+# or from anywhere:
+python3 {SKILL_DIR}/scripts/kb/cli.py query --question "ElTable virtual scrolling" --top-k 5
 ```
 
-Hybrid search: vector similarity (weight 0.7) + BM25 keywords (weight 0.3), optional FlashRank reranking.
+Hybrid search: vector similarity (weight 0.7) + BM25 keywords (weight 0.3), optional FlashRank reranking. Each result carries `context_preview` (first 300 chars of the stored page content); use `kb show --id <id>` for the full `context`.
 
 ### kb build — Full Build
 
@@ -56,6 +60,14 @@ python3 -m scripts.kb.cli build
 ```
 
 Parses 2 sidebar files → embeds 99 documents → writes to `data/element-plus.qdrant`. Auto-generates `data/element-plus.qdrant.meta.json` after B11.
+
+### kb show — Read One Doc (Full Context)
+
+```bash
+python3 -m scripts.kb.cli show --id <doc_id>
+```
+
+Prints the complete 12-field payload including the full `context` (query only returns a 300-char `context_preview`).
 
 ### kb reindex — Incremental Rebuild
 
@@ -130,15 +142,17 @@ python3 -m scripts.kb.cli config
 python3 -m scripts.kb.cli config --key embed_model --value sentence-transformers/all-MiniLM-L6-v2
 ```
 
+`--key/--value` validates the key against the known schema (nested keys use dots, e.g. `query.default_top_k`) and coerces the value to the field's type; the previous `config.json` is backed up to `config.json.bak` before writing. Secrets (`embed_api_key`/`rerank_api_key`) are printed masked as `***<last4>`.
+
 ## fetch Subcommand
 
 ```bash
-# Fetch a single doc
-python3 -m scripts.fetcher.fetch https://element-plus.org/zh-CN/component/button
+# Fetch a single doc (absolute path invocation works from any directory)
+python3 {SKILL_DIR}/scripts/fetcher/fetch.py https://element-plus.org/zh-CN/component/button
 
 # Fetch then use for update-description
 python3 -c "
-import sys; sys.path.insert(0, '.')
+import sys; sys.path.insert(0, '{SKILL_DIR}')
 from scripts.fetcher.fetch import fetch
 r = fetch('https://element-plus.org/zh-CN/component/table')
 if 'error' not in r:
@@ -147,7 +161,7 @@ if 'error' not in r:
 "
 ```
 
-Returns `{title, url, content}`, where content is in Markdown format. Extracts `<main>` tag content to avoid navigation/footer interference.
+Returns `{title, url, content}`, where content is in Markdown format. Extracts `<main>` tag content to avoid navigation/footer interference. Known cleanup applied and limits: Cloudflare email-protection artifacts and `element-plus.run/#<base64>` demo links are stripped; any residual demo scaffolding inside page bodies is left as-is.
 
 ## Configuration
 
@@ -171,6 +185,7 @@ Returns `{title, url, content}`, where content is in Markdown format. Extracts `
 
 | Error | Cause | Solution |
 |------|------|------|
+| `ModuleNotFoundError: sentence_transformers` (or `torch`) | local embedding deps not installed; query/build/reindex crash without them | `pip install sentence-transformers` (or `pip install -r requirements.txt`); or switch to a cloud model: `config --key embed_model --value openai://<model>` + set `embed_base_url`/`embed_api_key` |
 | `embed_model mismatch` | embedder differs from DB during query/merge | Use `migrate-embed-model` to migrate or `reindex --force` to rebuild |
 | `point_id collision` | two doc_ids have matching first 16 hex chars (extremely rare) | Rebuild DB (different urls → different sha1) |
 | `unknown payload field` | set_payload writing a field outside the whitelist | Check field name, only 12 fields allowed (including C1 `context`/`context_hash`) |

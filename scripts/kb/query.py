@@ -216,6 +216,10 @@ def query(
 
 def _to_result(score: float, c: dict[str, Any]) -> dict[str, Any]:
     desc = c.get("description", NO_DESCRIPTION)
+    # Audit P1-5: the C1 schema stores fetched page content in `context`, but
+    # query results never returned it. Expose a truncated preview here; the
+    # complete text is available via `kb show --id <id>`.
+    context = c.get("context") or ""
     return {
         "id": c["id"],
         "title": c["title"],
@@ -224,6 +228,8 @@ def _to_result(score: float, c: dict[str, Any]) -> dict[str, Any]:
         "doc_type": c["doc_type"],
         "score": float(score),
         "needs_description": desc == NO_DESCRIPTION,
+        "has_context": bool(context),
+        "context_preview": context[:300],
     }
 
 

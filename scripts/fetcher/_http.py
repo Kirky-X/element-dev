@@ -163,6 +163,16 @@ _CF_EMAIL_ATTR_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Audit P2-7: Element Plus component pages link their live demos as
+# https://element-plus.run/#<base64> where the base64 fragment encodes the
+# ENTIRE demo project (often several KB per link). After HTML→Markdown these
+# anchors became huge opaque blobs — ~40% of fetched content was noise. Strip
+# the whole anchor before conversion so context stays prose.
+_DEMO_RUN_LINK_RE = re.compile(
+    r'<a\s+[^>]*href="https?://[^"]*element-plus\.run[^"]*"[^>]*>.*?</a>',
+    re.DOTALL | re.IGNORECASE,
+)
+
 COMMON_HEADERS: dict[str, str] = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -364,6 +374,9 @@ def extract_main_html(full_html: str) -> str:
     # C1: strip Cloudflare email protection artifacts for stable content_hash
     html = _CF_EMAIL_LINK_RE.sub(r"\1", html)  # unwrap email-protection links
     html = _CF_EMAIL_ATTR_RE.sub("", html)  # remove leftover hash attrs
+    # Audit P2-7: drop element-plus.run demo anchors (base64-encoded demo
+    # projects) — pure noise for the knowledge base.
+    html = _DEMO_RUN_LINK_RE.sub("", html)
     return html
 
 

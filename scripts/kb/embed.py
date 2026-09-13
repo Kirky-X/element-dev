@@ -16,8 +16,6 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-import httpx
-
 OPENAI_PREFIX = "openai://"
 
 
@@ -84,6 +82,8 @@ class Embedder:
             raise ValueError(
                 "openai:// embed model requires embed_base_url in config (got empty)"
             )
+        import httpx  # lazy: only the cloud backend needs it (audit P1-3)
+
         url = self.base_url.rstrip("/") + "/v1/embeddings"
         headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         resp = httpx.post(

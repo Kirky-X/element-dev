@@ -1,44 +1,66 @@
 """Unified CLI entrypoint for the kb submodule (task 4.18 + B7 link-auto/migrate).
 
 Usage:
-    python3 -m scripts.kb.cli <action> [options]
+    python3 -m scripts.kb.cli <action> [options]        # from the skill root
+    python3 /path/to/element-dev/scripts/kb/cli.py ...  # from anywhere (dual-mode)
 
 Actions:
     query                --question --top-k --doc-type --rerank
     build                --sidebars-dir
+    show                 --id                    (print one doc incl. full context)
     merge                --db-a --db-b --out
     reindex              --force
     update-description   --id --description
     update-links         --id --content
     link-auto            --threshold --max-per-doc     (B2)
     migrate-embed-model  [--model <name>]              (B1 migration)
-    config               (print current config)
+    fetch-update         --id [--force] [--ttl-days N] (C1)
+    config               [--key K --value V]           (view / modify config)
 
 db_path / collection / sidebars_dir / embed_model all come from config.json —
 no hard-coded paths (per spec). `--config` overrides the config file location;
-otherwise the config.json in the current working directory is used, falling back
-to DEFAULT_CONFIG when absent.
+otherwise `<skill_root>/config.json` (next to this package) is used — NOT the
+current working directory, so the CLI works from any directory. Relative
+db_path/sidebars_dir values are anchored to the config file's directory.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import re
+import shutil
 import sys
+from pathlib import Path
 from typing import Any, Optional
 
-from .config import DEFAULT_CONFIG, ensure_config, load_config
-from .embed import Embedder
-from .fetch_update import fetch_and_update
-from .indexer import QdrantIndexer
-from .links import update_links
-from .links_auto import auto_link
-from .merge import merge as do_merge
-from .query import query as do_query
-from .reindex import reindex as do_reindex
-from .sidebar_parser import parse_all_sidebars
-from .update_description import update_description
+# Allow both ``python3 -m scripts.kb.cli`` and direct
+# ``python3 <skill_root>/scripts/kb/cli.py`` invocation by ensuring the
+# skill root (element-dev) is on sys.path when run as a plain script.
+# Fix (audit P1-1): without this, running the file from another directory
+# raised ModuleNotFoundError because relative imports have no parent package.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-ACTIONS = ("query", "build", "merge", "reindex", "update-description",
+from scripts.kb.config import (
+    DEFAULT_CONFIG,
+    default_config_path,
+    ensure_config,
+    load_config,
+    resolve_config_paths,
+    save_config,
+)
+from scripts.kb.embed import Embedder
+from scripts.kb.fetch_update import fetch_and_update
+from scripts.kb.indexer import QdrantIndexer
+from scripts.kb.links import update_links
+from scripts.kb.links_auto import auto_link
+from scripts.kb.merge import merge as do_merge
+from scripts.kb.query import query as do_query
+from scripts.kb.reindex import reindex as do_reindex
+from scripts.kb.sidebar_parser import parse_all_sidebars
+from scripts.kb.update_description import update_description
+
+ACTIONS = ("query", "build", "show", "merge", "reindex", "update-description",
            "update-links", "link-auto", "migrate-embed-model",
            "fetch-update", "config")
 
@@ -62,16 +84,31 @@ def make_indexer(cfg: dict[str, Any]) -> QdrantIndexer:
     )
 
 
+def _resolve_config_path(config_arg: Optional[str]) -> str:
+    """Config file location: --config wins, else the skill root's config.json.
+
+    Fix (audit P1-1): the default no longer depends on os.getcwd() —
+    config.json lives next to the scripts/ package, so the CLI works from any
+    directory.
+    """
+    if config_arg:
+        return config_arg
+    return default_config_path()
+
+
 def _load_cfg(config_arg: Optional[str]) -> dict[str, Any]:
+    path = _resolve_config_path(config_arg)
     if config_arg:
         cfg = load_config(config_arg)
         if cfg is None:
             raise FileNotFoundError(f"config file not found: {config_arg}")
-        return cfg
-    cfg = ensure_config()
-    if cfg is None:
-        return dict(DEFAULT_CONFIG)
-    return cfg
+    else:
+        cfg = ensure_config()
+        if cfg is None:
+            cfg = dict(DEFAULT_CONFIG)
+    # Relative db_path/sidebars_dir are anchored to the config file's dir so
+    # they resolve identically from any cwd (audit P1-1).
+    return resolve_config_paths(cfg, Path(path).parent)
 
 
 # ---- argument parser -------------------------------------------------------
@@ -94,6 +131,12 @@ def build_parser() -> argparse.ArgumentParser:
     b.add_argument("--sidebars-dir", default=None,
                    help="override sidebars_dir from config")
     b.add_argument("--config", default=None)
+
+    sh = sub.add_parser("show",
+                        help="print one doc's full payload by id "
+                             "(including the complete context field)")
+    sh.add_argument("--id", required=True, help="doc sha1 id (from query results)")
+    sh.add_argument("--config", default=None)
 
     m = sub.add_parser("merge", help="merge two DBs into a new one")
     m.add_argument("--db-a", required=True)
@@ -136,8 +179,14 @@ def build_parser() -> argparse.ArgumentParser:
                          "(defaults to config.json's embed_model)")
     me.add_argument("--config", default=None)
 
-    c = sub.add_parser("config", help="print the effective config")
+    c = sub.add_parser("config", help="print the effective config, or set one key")
     c.add_argument("--config", default=None)
+    c.add_argument("--key", default=None,
+                   help="config key to modify (dotted for nested, e.g. "
+                        "query.default_top_k); must be used with --value")
+    c.add_argument("--value", default=None,
+                   help="new value; coerced to the existing value's type "
+                        "(JSON for dict/list keys). Use with --key.")
 
     # C1: fetch + smart update with TTL caching
     fu = sub.add_parser("fetch-update",
@@ -239,10 +288,147 @@ def _run_update_links(args: argparse.Namespace) -> Any:
     return linked
 
 
+# ---- config view/modify + secret masking (audit P1-2, P2-8) ---------------
+
+_SECRET_KEY_RE = re.compile(r"api_key|token", re.IGNORECASE)
+
+
+def mask_secrets(value: Any) -> Any:
+    """Return a copy of `value` with secret-looking fields masked.
+
+    Any dict key matching api_key/token has its string value replaced by
+    ``***<last4>`` (audit P2-8: `kb config` used to print embed_api_key in
+    plaintext). Empty values stay empty.
+    """
+    if isinstance(value, dict):
+        out: dict[str, Any] = {}
+        for k, v in value.items():
+            if isinstance(v, dict):
+                out[k] = mask_secrets(v)
+            elif isinstance(v, str) and _SECRET_KEY_RE.search(str(k)):
+                out[k] = _mask_secret_str(v)
+            else:
+                out[k] = v
+        return out
+    return value
+
+
+def _mask_secret_str(value: str) -> str:
+    if not value:
+        return ""
+    return f"***{value[-4:]}" if len(value) > 4 else "***"
+
+
+def _coerce_config_value(key: str, current: Any, raw: str) -> Any:
+    """Coerce the --value string to the current value's type (Rule: type-safe
+    config writes). dict/list keys must be given as JSON."""
+    try:
+        if isinstance(current, bool):
+            low = raw.strip().lower()
+            if low in ("true", "1", "yes"):
+                return True
+            if low in ("false", "0", "no"):
+                return False
+            raise ValueError(f"{key} expects a boolean (true/false), got {raw!r}")
+        if isinstance(current, int):
+            return int(raw)
+        if isinstance(current, float):
+            return float(raw)
+        if isinstance(current, (dict, list)):
+            return json.loads(raw)
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"config: invalid value for {key!r} "
+            f"(expected {type(current).__name__}): {raw!r} ({exc})"
+        ) from exc
+    return raw
+
+
+def _set_config_key(cfg: dict[str, Any], key: str, raw_value: str) -> tuple[Any, Any]:
+    """Set a (possibly dotted) key in cfg, validating against DEFAULT_CONFIG.
+
+    Returns (old_value, new_value). Raises ValueError for unknown keys or
+    type-mismatched values — unknown keys are rejected so typos can't silently
+    add dead config entries (Rule 12: fail loud).
+    """
+    parts = key.split(".")
+    template: Any = DEFAULT_CONFIG
+    for p in parts:
+        if isinstance(template, dict) and p in template:
+            template = template[p]
+        else:
+            raise ValueError(
+                f"config: unknown key {key!r} — allowed top-level keys: "
+                f"{sorted(DEFAULT_CONFIG)}; nested keys use dots "
+                f"(e.g. query.default_top_k)"
+            )
+    node: dict[str, Any] = cfg
+    for p in parts[:-1]:
+        nxt = node.get(p)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            node[p] = nxt
+        node = nxt
+    old = node.get(parts[-1], template)
+    new = _coerce_config_value(key, old if old is not None else template, raw_value)
+    node[parts[-1]] = new
+    return old, new
+
+
 def _run_config(args: argparse.Namespace) -> Any:
+    if (args.key is None) != (args.value is None):
+        raise ValueError("config: --key and --value must be used together")
+
+    path = _resolve_config_path(args.config)
+    if args.key is None:
+        cfg = _load_cfg(args.config)
+        masked = mask_secrets(cfg)
+        print(json.dumps(masked, ensure_ascii=False, indent=2))
+        return masked
+
+    # --key/--value: load the RAW file config (not cwd/path-resolved) so the
+    # write-back preserves the user's relative paths (audit P1-2).
+    cfg = load_config(path)
+    if cfg is None:
+        if args.config:
+            raise FileNotFoundError(f"config file not found: {args.config}")
+        cfg = dict(DEFAULT_CONFIG)
+    old, new = _set_config_key(cfg, args.key, args.value)
+    # Back up the existing file before writing (config.json.bak, gitignored).
+    backup_path: Optional[str] = None
+    if Path(path).exists():
+        backup_path = path + ".bak"
+        shutil.copy2(path, backup_path)
+    save_config(cfg, path)
+    secret = bool(_SECRET_KEY_RE.search(args.key))
+    out = {
+        "updated": args.key,
+        "old": _mask_secret_str(old) if secret and isinstance(old, str) else old,
+        "new": _mask_secret_str(new) if secret and isinstance(new, str) else new,
+        "config": path,
+        "backup": backup_path,
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return out
+
+
+def _run_show(args: argparse.Namespace) -> Any:
+    """Audit P1-5: print a single doc's full payload — `query` only returns a
+    300-char context preview; the complete context is read back here."""
     cfg = _load_cfg(args.config)
-    print(json.dumps(cfg, ensure_ascii=False, indent=2))
-    return cfg
+    idx = make_indexer(cfg)
+    try:
+        doc = idx.get(args.id)
+    finally:
+        idx.close()
+    if doc is None:
+        print(json.dumps({"error": f"doc not found: {args.id}"},
+                         ensure_ascii=False), file=sys.stderr)
+        sys.exit(2)
+    # The 384-dim vector is storage detail, not documentation content.
+    doc.pop("embedding", None)
+    print(json.dumps(doc, ensure_ascii=False, indent=2))
+    return doc
 
 
 def _run_fetch_update(args: argparse.Namespace) -> Any:
@@ -364,6 +550,7 @@ def _run_migrate_embed_model(args: argparse.Namespace) -> Any:
 _DISPATCH = {
     "query": _run_query,
     "build": _run_build,
+    "show": _run_show,
     "merge": _run_merge,
     "reindex": _run_reindex,
     "update-description": _run_update_description,
@@ -375,11 +562,55 @@ _DISPATCH = {
 }
 
 
+# ---- dependency failure guidance (audit P1-3) ------------------------------
+
+# module (as named in the ImportError) -> pip distribution name
+_PIP_NAMES = {
+    "sentence_transformers": "sentence-transformers",
+    "rank_bm25": "rank-bm25",
+    "qdrant_client": "qdrant-client",
+    "flashrank": "flashrank",
+    "modelscope": "modelscope",
+    "httpx": "httpx",
+    "openai": "openai",
+}
+_MODULE_IMPORT_RE = re.compile(r"No module named '(?P<mod>[A-Za-z0-9_.]+)'")
+
+
+def dependency_hint(exc: ImportError) -> str:
+    """Human-readable recovery message for a missing optional/heavy dependency.
+
+    Audit P1-3: a missing sentence-transformers/torch (or rank-bm25 etc.) used
+    to surface as a raw ModuleNotFoundError traceback with no guidance.
+    """
+    mod = ""
+    m = _MODULE_IMPORT_RE.search(str(exc))
+    if m:
+        mod = m.group("mod").split(".")[0]
+    pkg = _PIP_NAMES.get(mod, mod or "<package>")
+    lines = [
+        f"[deps] missing Python dependency: {mod or exc.name or '<unknown>'}",
+        f"  fix:   pip install {pkg}",
+        f"  (all deps at once: pip install -r requirements.txt)",
+        "  alternative: switch to a cloud embedding model — set config.json",
+        "  embed_model to \"openai://<model>\" plus embed_base_url/embed_api_key,",
+        "  then no local sentence-transformers/torch is needed.",
+    ]
+    return "\n".join(lines)
+
+
 def main(argv: Optional[list[str]] = None) -> Any:
     parser = build_parser()
     args = parser.parse_args(argv)
     handler = _DISPATCH[args.action]
-    return handler(args)
+    try:
+        return handler(args)
+    except ImportError as exc:
+        # Audit P1-3: heavy deps (sentence-transformers+torch, flashrank, …)
+        # are imported lazily inside the handlers; a missing one prints a
+        # recovery hint on stderr and exits non-zero instead of a bare traceback.
+        print(dependency_hint(exc), file=sys.stderr)
+        sys.exit(2)
 
 
 if __name__ == "__main__":

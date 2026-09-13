@@ -18,6 +18,8 @@ upgraded to include description+links):
       - updated_at                                -> latest
       - description differs between sides         -> mark needs_reindex=True
       - embed_model                               -> inherits from source (must agree)
+      - C1: context/context_hash follow the non-empty/newer rule too
+        (audit P1-4: they were previously dropped, blanking fetched content)
   * B4: content_hash recomputed via sidebar_parser._make_content_hash (incl.
     description + sorted links) — single source of truth.
   * write merged docs into a NEW DB at out_path, preserving the source vectors
@@ -38,7 +40,13 @@ from .indexer import QdrantIndexer
 from .sidebar_parser import NO_DESCRIPTION, _make_content_hash
 
 # Fields merged by the "non-empty priority, else newer wins" rule.
-_SCALAR_FIELDS = ["title", "doc_type", "url", "description"]
+# Audit P1-4: C1's context/context_hash were missing here — merging two DBs
+# that share a doc id silently replaced a fetched context with "" (empty on
+# the other side). They follow the same rule: non-empty side wins; if both
+# are non-empty the newer updated_at side wins (context_hash tracks context,
+# so merging them as a pair keeps hash and content consistent).
+_SCALAR_FIELDS = ["title", "doc_type", "url", "description",
+                  "context", "context_hash"]
 
 
 def _is_empty(field: str, value: Any) -> bool:

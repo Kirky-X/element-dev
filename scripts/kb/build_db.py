@@ -1,15 +1,15 @@
-"""One-shot prebuild script for the HarmonyOS knowledge base (task 7.1).
+"""One-shot prebuild script for the Element Plus knowledge base (task 7.1).
 
 Usage:
     python3 scripts/kb/build_db.py [--config CONFIG] [--sidebars-dir DIR]
 
-Reads ``config.json`` (or DEFAULT_CONFIG when absent), parses the 9 sidebar
+Reads ``config.json`` (or DEFAULT_CONFIG when absent), parses the 2 sidebar
 files in ``sidebars_dir``, builds a fresh Qdrant local-mode index at
 ``db_path`` using the configured ``embed_model``, and prints a summary of the
 result (per-doc-type counts, total vectors, on-disk size of the DB).
 
 This is the script users invoke to (re)generate the prebuilt
-``data/harmonyos.qdrant`` shipped with the skill. The default config uses
+``data/element-plus.qdrant`` shipped with the skill. The default config uses
 ``sentence-transformers/paraphrase-MiniLM-L3-v2`` via ModelScope; switching
 ``embed_model`` in ``config.json`` then re-running this script refreshes all
 vectors (see also ``reindex.py`` for hash-delta re-embedding).
@@ -40,12 +40,17 @@ from typing import Any
 
 # Allow both ``python3 -m scripts.kb.build_db`` and direct
 # ``python3 scripts/kb/build_db.py`` invocation by ensuring the project
-# root (hap-dev) is on sys.path when run as a plain script.
+# root (element-dev) is on sys.path when run as a plain script.
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.kb import cli  # noqa: E402
-from scripts.kb.config import DEFAULT_CONFIG, ensure_config, load_config  # noqa: E402
+from scripts.kb.config import (  # noqa: E402
+    DEFAULT_CONFIG,
+    ensure_config,
+    load_config,
+    resolve_config_paths,
+)
 from scripts.kb.sidebar_parser import parse_all_sidebars  # noqa: E402
 
 # B11: meta file schema version. Bump when the on-disk meta format changes
@@ -81,12 +86,13 @@ def _dir_size(path: str) -> int:
 
 
 def _load_cfg(config_arg: str | None) -> dict[str, Any]:
-    """Load config from explicit path, cwd config.json, or DEFAULT_CONFIG."""
+    """Load config from explicit path, the skill root's config.json, or
+    DEFAULT_CONFIG. Relative db_path/sidebars_dir anchor to the config's dir."""
     if config_arg:
         cfg = load_config(config_arg)
         if cfg is None:
             raise FileNotFoundError(f"config file not found: {config_arg}")
-        return cfg
+        return resolve_config_paths(cfg, Path(config_arg).parent)
     cfg = ensure_config()
     if cfg is None:
         return dict(DEFAULT_CONFIG)

@@ -2,6 +2,10 @@
 name: element-dev
 description: "Element Plus development skill. Trigger: Element Plus/Element Plus components/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI library/element-plus.org documentation query/component usage/Props/Events/Slots/组件用法/查组件文档/Element Plus 报错/组件属性怎么配. Boundary: design-to-Element Plus code generation belongs to maliang; this skill only does Element Plus documentation knowledge base queries."
 license: MIT
+metadata:
+  version: "0.1.0"
+  author: "Kirky-X"
+  repo: "https://github.com/Kirky-X/element-dev"
 ---
 
 # ELEMENT-DEV — Element Plus Development Skill

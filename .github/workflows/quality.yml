@@ -1,0 +1,33 @@
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-quality:
+    name: Skill quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Skill lint (frontmatter/链接/JSON/规则24)
+        run: python3 scripts/skill_lint.py .
+
+      - name: Unit tests
+        if: ${{ hashFiles('tests/*.py') != '' }}
+        run: |
+          python3 -m pip install --quiet pytest
+          python3 -m pytest tests -q

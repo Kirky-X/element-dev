@@ -1,6 +1,7 @@
 """Qdrant local-mode indexer (tasks 4.6-4.7).
 
-Stores the 9-field doc schema in a local Qdrant collection. The payload holds all
+Stores the 12-field doc schema (B1 embed_model + C1 context/context_hash
+included) in a local Qdrant collection. The payload holds all
 non-vector fields; the vector is computed from `description` when it has been
 backfilled (i.e. != "No description"), otherwise from `title` (per design D2).
 
@@ -91,8 +92,8 @@ class QdrantIndexer:
         whose first 16 hex chars coincide) and raises ValueError — silent
         overwrite would lose data without notice (Rule 12: fail loud).
         """
-        self._ensure_collection(recreate=True)
         if not docs:
+            self._ensure_collection(recreate=True)
             return
         # B12: pre-flight collision check within this batch.
         seen: dict[int, str] = {}  # point_id -> doc_id
@@ -113,6 +114,10 @@ class QdrantIndexer:
         # overwritten here because the embedder just produced the vector.
         for d in docs:
             d["embed_model"] = embedder.model_name
+        # Embed BEFORE recreating the collection: local-mode Qdrant has no
+        # transactions, so a crash here (missing/heavy deps, model download
+        # failure) must leave the existing collection untouched instead of
+        # wiping it and dying mid-build.
         texts = [_embed_text(d) for d in docs]
         vectors = embedder.embed_batch(texts)
         if len(vectors) != len(docs):
@@ -124,6 +129,7 @@ class QdrantIndexer:
                 raise ValueError(
                     f"embedding dim {len(v)} != collection dim {self.dim}"
                 )
+        self._ensure_collection(recreate=True)
         points = [
             qm.PointStruct(id=_point_id(d["id"]), vector=v, payload=self._payload(d))
             for d, v in zip(docs, vectors)
@@ -308,12 +314,19 @@ class QdrantIndexer:
 
     @staticmethod
     def _payload_from(payload: dict[str, Any]) -> dict[str, Any]:
+        # Legacy tolerance: some pre-B1 payloads carry the Chinese display
+        # string "无描述" as a literal description. It is a placeholder, not
+        # content — normalize it so D6 lazy backfill and _embed_text treat
+        # these docs as description-less instead of embedding the constant.
+        desc = payload.get("description") or NO_DESCRIPTION
+        if desc == "无描述":
+            desc = NO_DESCRIPTION
         return {
             "id": payload[ID_FIELD],
             "title": payload["title"],
             "doc_type": payload["doc_type"],
             "url": payload["url"],
-            "description": payload.get("description", NO_DESCRIPTION),
+            "description": desc,
             # C1: legacy tolerance — pre-C1 docs lack context/context_hash.
             "context": payload.get("context") or "",
             "links": payload.get("links", []) or [],

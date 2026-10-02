@@ -15,18 +15,20 @@ English | [中文](README.md)
 | `fetch` | HTTP GET fetches static documentation pages from element-plus.org, extracts `<main>` into Markdown, cleans Cloudflare email-protection traces, and returns `{title, url, content}` |
 | `config` | Views/edits embed_model, db_path, context_ttl_days, and other settings; `--key/--value` validates against the known schema with type coercion, backs up `config.json.bak` before writing, and masks printed secrets as `***<last 4 chars>` (measured: `sk-test1234abcd` → `***abcd`) |
 
-**Pre-built knowledge base, ready out of the box**: the repo ships `data/element-plus.qdrant/` (512KB; meta measured `doc_count: 99`); 99 documents = design-guide 17 + component 82; default embedding model `paraphrase-MiniLM-L3-v2` (384 dims, ModelScope download source).
+**Pre-built knowledge base, ready out of the box**: the repo ships `data/element-plus.qdrant/` (512KB; meta measured `doc_count: 99`); 99 documents = design-guide 17 + component 82; default embedding model `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ModelScope download source).
 
 **Hybrid retrieval**: vector similarity (0.7) fused with BM25 keywords (0.3), with optional FlashRank reranking. query returns a 300-character `context_preview`; `kb show --id` prints the 12-field payload including the full `context`.
 
 **Two-layer SSRF protection** (`scripts/fetcher/_http.py`): layer one validates the URL (http(s) only, rejects intranet IP literals, hostname whitelist); layer two validates the resolved IP after DNS resolution, and every redirect hop re-passes the whitelist.
 
-**Dual CWD modes**: run `python3 -m scripts.kb.cli` from the skill root, or call `scripts/kb/cli.py` directly by absolute path from any directory (e.g. the user's Vue project) — config and database paths are always resolved relative to the skill root, independent of cwd. When merging two databases, `merge` preserves the `context` field and validates that embed_model matches.
+**Dual CWD modes**: run `python3 -m scripts.kb.cli` from the skill root, or call `scripts/kb/cli.py` directly by absolute path from any directory (e.g. the user's Vue project) — config and database paths are always resolved relative to the skill root, independent of cwd. When merging two databases, `merge` preserves the `context` field and validates that embed_model matches; note that merge **renames both input DBs** to `.bak.<timestamp>` backups (the original paths cease to exist — use the new DB at `--out` afterwards).
 
 ## 📦 Installation
 
 ```bash
 # 同步到 agent 技能目录（~/.zcode/skills 与 ~/.claude/skills）
+# Note: that script lives at the skills-workspace root (../scripts/sync-skills.sh, relative to this repo root),
+# not inside this repo; users cloning from GitHub should use the `npx skills add` method below
 bash scripts/sync-skills.sh element-dev
 
 # 首跑前置：安装 Python 依赖
@@ -76,9 +78,9 @@ flowchart LR
 
 ## ✅ Tests & Verification
 
-Measured `python3 -m pytest tests/ scripts/ -q`: **62 passed** (tests/ 48 + scripts/kb/tests/ 14). Note that running only `scripts/` collects just 14 tests; the root-level `tests/` must be passed explicitly. Tests use a `FakeEmbedder` (SHA1-derived deterministic vectors) and run offline.
+Measured `python3 -m pytest tests/ scripts/ -q`: **67 passed** (tests/ 53 + scripts/kb/tests/ 14). Note that running only `scripts/` collects just 14 tests; the root-level `tests/` must be passed explicitly. Tests use a `FakeEmbedder` (SHA1-derived deterministic vectors) and run offline.
 
-> Both `tests/` and `sidebars/` are gitignored (development-time artifacts stay out of the repo), so there is no tests directory after cloning; the pre-built `data/element-plus.qdrant/` is the exception and ships with the repo.
+> `sidebars/` is gitignored (development-time artifact, not in the repo), so run `scripts/fetch-sidebars.sh` first after cloning before `kb build`; `tests/` (10 files) and the pre-built `data/element-plus.qdrant/` ship with the repo — all 67 tests run offline right after cloning.
 
 ## 📁 Directory Structure
 

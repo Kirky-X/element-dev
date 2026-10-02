@@ -15,18 +15,20 @@
 | `fetch` | HTTP GET 抓取 element-plus.org 静态文档页，提取 `<main>` 转 Markdown，清理 Cloudflare email-protection 痕迹，返回 `{title, url, content}` |
 | `config` | 查看/修改 embed_model、db_path、context_ttl_days 等配置；`--key/--value` 按已知 schema 校验并做类型矫正，写前备份 `config.json.bak`，密钥打印掩码为 `***<末4位>`（实测 `sk-test1234abcd` → `***abcd`） |
 
-**预构建知识库开箱即用**：仓库自带 `data/element-plus.qdrant/`（512KB，meta 实测 `doc_count: 99`），99 篇文档 = design-guide 17 + component 82，默认嵌入模型 `paraphrase-MiniLM-L3-v2`（384 维，ModelScope 下载源）。
+**预构建知识库开箱即用**：仓库自带 `data/element-plus.qdrant/`（512KB，meta 实测 `doc_count: 99`），99 篇文档 = design-guide 17 + component 82，默认嵌入模型 `paraphrase-multilingual-MiniLM-L12-v2`（384 维，ModelScope 下载源）。
 
 **混合检索**：向量相似（0.7）+ BM25 关键词（0.3）融合，可选 FlashRank 重排。query 返回 300 字 `context_preview`，`kb show --id` 打印含完整 `context` 的 12 字段 payload。
 
 **SSRF 双层防护**（`scripts/fetcher/_http.py`）：第一层 URL 校验（仅 http(s)、拒绝内网 IP 字面量、主机名白名单）；第二层 DNS 解析后校验落点 IP，且重定向每一跳都重新过白名单。
 
-**CWD 双模式**：在 skill 根目录用 `python3 -m scripts.kb.cli`，或在任意目录（如用户的 Vue 工程）按绝对路径直接调 `scripts/kb/cli.py`——配置与库路径始终相对 skill 根定位，与 cwd 无关。`merge` 合并两库时保留 `context` 字段并校验 embed_model 一致。
+**CWD 双模式**：在 skill 根目录用 `python3 -m scripts.kb.cli`，或在任意目录（如用户的 Vue 工程）按绝对路径直接调 `scripts/kb/cli.py`——配置与库路径始终相对 skill 根定位，与 cwd 无关。`merge` 合并两库时保留 `context` 字段并校验 embed_model 一致；注意 merge 会把两个**输入库**改名为 `.bak.<时间戳>` 备份（原路径不再存在，请改用 `--out` 的新库）。
 
 ## 📦 安装
 
 ```bash
 # 同步到 agent 技能目录（~/.zcode/skills 与 ~/.claude/skills）
+# 注意：该脚本在 skills 工作区根（../scripts/sync-skills.sh，相对本仓根），不在本仓内；
+# 从 GitHub clone 本仓的用户请直接用下方 npx skills add 方式
 bash scripts/sync-skills.sh element-dev
 
 # 首跑前置：安装 Python 依赖
@@ -76,9 +78,9 @@ flowchart LR
 
 ## ✅ 测试与验证
 
-实测 `python3 -m pytest tests/ scripts/ -q`：**62 passed**（tests/ 48 + scripts/kb/tests/ 14）。注意只跑 `scripts/` 只能收集到 14 个，根目录 `tests/` 必须显式传入。测试用 `FakeEmbedder`（SHA1 派生确定性向量），离线可跑。
+实测 `python3 -m pytest tests/ scripts/ -q`：**67 passed**（tests/ 53 + scripts/kb/tests/ 14）。注意只跑 `scripts/` 只能收集到 14 个，根目录 `tests/` 必须显式传入。测试用 `FakeEmbedder`（SHA1 派生确定性向量），离线可跑。
 
-> `tests/` 与 `sidebars/` 均被 gitignore（开发期产物不入仓库），clone 后无测试目录；预构建库 `data/element-plus.qdrant/` 例外，随仓库分发。
+> `sidebars/` 被 gitignore（开发期产物不入仓库），clone 后需先跑 `scripts/fetch-sidebars.sh` 生成才能 `kb build`；`tests/`（10 文件）与预构建库 `data/element-plus.qdrant/` 随仓库分发，clone 后即可离线跑全部 67 个测试。
 
 ## 📁 目录结构
 

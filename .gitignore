@@ -52,4 +52,3 @@ darwin-result-card.png
 # Python cache
 *.pyc
 .ruff_cache/
-# Specmark/openspec 临时产物

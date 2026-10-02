@@ -29,5 +29,5 @@ jobs:
       - name: Unit tests
         if: ${{ hashFiles('tests/*.py') != '' }}
         run: |
-          python3 -m pip install --quiet pytest
-          python3 -m pytest tests -q
+          python3 -m pip install --quiet pytest qdrant-client rank-bm25 httpx
+          python3 -m pytest tests scripts -q

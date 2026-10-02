@@ -6,8 +6,8 @@ Flow:
      same dim is necessary but not sufficient (First Principles fact F1).
   2. embed the question
   3. Qdrant vector search over top_k*3 candidates (optionally filtered by doc_type)
-  4. BM25Okapi over the candidates' ``title + description`` (char-level tokenize so
-     Chinese needs no extra dependency)
+  4. BM25Okapi over the candidates' ``title + description`` (B8 hybrid
+     tokenizer: English/digit words as whole tokens, CJK as per-char tokens)
   5. min-max normalize both score sets and fuse with vector_weight / bm25_weight
   6. (optional) flashrank rerank over the fused top_k
   7. return top_k docs, each annotated with needs_description (D6 lazy backfill flag)
@@ -234,22 +234,21 @@ def _to_result(score: float, c: dict[str, Any]) -> dict[str, Any]:
 
 
 def _rerank(question: str, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rerank `results` with flashrank. If flashrank isn't installed, return the
-    input unchanged (caller explicitly asked for rerank; we surface the missing
-    dep by falling back rather than crashing — logged via the unchanged order)."""
+    """Rerank `results` with flashrank.
+
+    flashrank is an optional dependency: the caller explicitly passed
+    --rerank, so a missing install must NOT silently degrade to the fused
+    order (SKILL.md Prohibitions 3: no swallowing errors). The ImportError
+    propagates to cli.main, which prints the pip-install hint and exits 2.
+    """
     if not results:
         return results
-    try:
-        from flashrank import RankModel
-    except ImportError:
-        # flashrank optional — fall back to fused order. Not silent: the caller
-        # can detect rerank didn't happen because results are unchanged.
-        return results
-    ranker = RankModel()
+    from flashrank import Ranker, RerankRequest
+    ranker = Ranker()
     passages = [
         {"id": r["id"], "text": f"{r['title']} {r['description']}"} for r in results
     ]
-    reranked = ranker.rerank(question, passages)
+    reranked = ranker.rerank(RerankRequest(query=question, passages=passages))
     id_to_doc = {r["id"]: r for r in results}
     out: list[dict[str, Any]] = []
     seen: set[str] = set()

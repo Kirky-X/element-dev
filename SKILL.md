@@ -1,6 +1,6 @@
 ---
 name: element-dev
-description: "Element Plus development skill. Trigger: Element Plus/Element Plus components/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI library/element-plus.org documentation query/component usage/Props/Events/Slots/组件用法/查组件文档/Element Plus 报错/组件属性怎么配. Boundary: design-to-Element Plus code generation belongs to maliang; this skill only does Element Plus documentation knowledge base queries."
+description: "Element Plus development skill. Trigger: Element Plus/Element Plus components/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI library/element-plus.org documentation query/component usage/Props/Events/Slots/组件用法/查组件文档/Element Plus 组件或 API 报错/组件属性怎么配. Boundary: this skill only does Element Plus documentation knowledge base queries; design-to-Element Plus code generation belongs to maliang; Element UI (Vue 2) is a different library and NOT covered (use external Element UI docs); project scaffolding belongs to pangu; Flutter/Dart belongs to flutter-dev; HarmonyOS/ArkTS belongs to hap-dev."
 license: MIT
 metadata:
   version: "0.1.0"
@@ -14,7 +14,7 @@ Vue 3 + Element Plus component library development assistance skill. Three subco
 
 > **Boundary**: 设计稿 → Element Plus 代码生成用 maliang；本 skill 只做 Element Plus 文档知识库查询与知识库维护。
 
-- **kb** (local knowledge base) — Local Qdrant knowledge base, 2-category sidebar document classification (design-guide 17 docs + component 82 docs = 99 documents), vector embedding (default `paraphrase-MiniLM-L3-v2`, switchable between ModelScope/cloud) + BM25 keyword indexing + optional FlashRank reranking. 12-field schema (including C1 `context`/`context_hash`). Sub-actions: query/build/show/merge/reindex/update-description/update-links/link-auto/migrate-embed-model/fetch-update/config. Answers "**what can be found locally**".
+- **kb** (local knowledge base) — Local Qdrant knowledge base, 2-category sidebar document classification (design-guide 17 docs + component 82 docs = 99 documents), vector embedding (default `paraphrase-multilingual-MiniLM-L12-v2`, switchable between ModelScope/cloud) + BM25 keyword indexing + optional FlashRank reranking. 12-field schema (including C1 `context`/`context_hash`). Sub-actions: query/build/show/merge/reindex/update-description/update-links/link-auto/migrate-embed-model/fetch-update/config. Answers "**what can be found locally**".
 - **fetch** (online scraping) — Direct HTTP GET scraping of element-plus.org static doc pages, extracting `<main>` content and converting to Markdown, cleaning Cloudflare email-protection artifacts. Serves as a legitimate channel for kb description/links/context population. Answers "**what's available online**".
 - **config** (configuration) — View/modify embed_model, rerank_model, db_path, context_ttl_days and other config items. Answers "**how to switch**".
 
@@ -102,6 +102,8 @@ B13: synchronously updates content_hash (B4 formula includes description).
 python3 -m scripts.kb.cli update-links --id <doc_id> --content "<markdown with related recommendations>"
 ```
 
+Contract: `--content`/`--file` must contain a `Related Recommendations` / `Related Documents` / `Related` heading block (e.g. `## Related`); only URLs inside that block are extracted, and only those already in the index are linked (self-links skipped). Content without such a heading returns `{"linked": []}` with a stderr note — it is not an error, but no links are written.
+
 ### kb migrate-embed-model — Model Migration
 
 ```bash
@@ -115,6 +117,8 @@ python3 -m scripts.kb.cli merge --db-a <path_a> --db-b <path_b> --out <out_path>
 ```
 
 B3: entry validates both DBs have the same embed_model.
+
+> **Both input DBs are renamed** to `<path>.bak.<timestamp>` after the merge — they no longer exist at their original paths. Use the merged DB at `--out` from now on; re-running `query`/`reindex` against the old path would silently create a fresh empty DB (the backups list in the JSON output records the renamed paths).
 
 ### kb fetch-update — Fetch URL + Smart Update (C1)
 
@@ -148,6 +152,22 @@ python3 -m scripts.kb.cli config --key embed_model --value sentence-transformers
 
 `--key/--value` validates the key against the known schema (nested keys use dots, e.g. `query.default_top_k`) and coerces the value to the field's type; the previous `config.json` is backed up to `config.json.bak` before writing. Secrets (`embed_api_key`/`rerank_api_key`) are printed masked as `***<last4>`.
 
+### kb query failure fallback (context7)
+
+If a `kb query` yields zero candidates in the local KB (prebuilt snapshot of 99 docs — it misses on components/props released after the last build), the CLI returns a single labeled marker instead of fabricated content:
+
+```json
+{
+  "id": "context7-fallback",
+  "fallback": true,
+  "source": "context7",
+  "context7_library_id": "/element-plus/element-plus",
+  "context7_instruction": "KB query miss — call context7 MCP: ..."
+}
+```
+
+Agent-side flow: on `fallback: true`, call the context7 MCP tools — `resolve-library-id(libraryName="element-plus")`, then `query-docs(libraryId="/element-plus/element-plus", query=<the user question>)` — and answer from the returned live docs, citing them. Do not present the marker itself as document content.
+
 ## fetch Subcommand
 
 ```bash
@@ -173,7 +193,7 @@ Returns `{title, url, content}`, where content is in Markdown format. Extracts `
 
 | Field | Default value | Description |
 |------|--------|------|
-| `embed_model` | `sentence-transformers/paraphrase-MiniLM-L3-v2` | Embedding model |
+| `embed_model` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Embedding model |
 | `embed_dim` | `384` | Vector dimension |
 | `embed_source` | `modelscope` | Model source (modelscope/huggingface/openai) |
 | `db_path` | `data/element-plus.qdrant` | Qdrant local DB path |
@@ -195,7 +215,6 @@ Returns `{title, url, content}`, where content is in Markdown format. Extracts `
 | `unknown payload field` | set_payload writing a field outside the whitelist | Check field name, only 12 fields allowed (including C1 `context`/`context_hash`) |
 | `set_payload: no fields to set` | empty dict call | Check caller arguments |
 | `HTTP request failed` | fetch URL unreachable | Check URL/network/element-plus.org availability |
-| `keyword must not be empty` | query empty string | Provide a valid question |
 
 ## Prohibitions
 

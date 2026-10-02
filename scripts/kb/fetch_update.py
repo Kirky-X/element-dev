@@ -1,12 +1,12 @@
 """C1: fetch URL → summarize → update context/description/vector with TTL caching.
 
 Implements the smart update flow:
-1. If doc has context AND update_at is within TTL → return cached (no fetch)
+1. If doc has context AND updated_at is within TTL → return cached (no fetch)
 2. If context expired or missing → fetch URL
    a. Compute context_hash = sha1(fetched_content)
-   b. If hash matches stored → only update update_at (content unchanged)
+   b. If hash matches stored → only update updated_at (content unchanged)
    c. If hash differs → update context, description, vector, context_hash,
-      content_hash, update_at (and optionally re-run link-auto for new neighbors)
+      content_hash, updated_at
 
 The `description` is generated from `context` via an extractive summary by
 default (first meaningful paragraph, max 120 chars). An optional `summarize`

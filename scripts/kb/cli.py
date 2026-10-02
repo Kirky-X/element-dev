@@ -237,6 +237,12 @@ def _run_merge(args: argparse.Namespace) -> Any:
     res = do_merge(args.db_a, args.db_b, args.out, cfg["collection"],
                    dim=cfg.get("embed_dim", 384))
     print(json.dumps(res, ensure_ascii=False, indent=2))
+    # The two input DBs were RENAMED to .bak.<ts> by merge() — say so loudly,
+    # otherwise the "disappeared" paths look like data loss and later commands
+    # would silently create a fresh empty DB at the old location.
+    print(f"NOTE: input DBs were renamed to backups (see \"backups\" above) — "
+          f"use the merged DB at {args.out} from now on.",
+          file=sys.stderr)
     if res["needs_reindex_count"] > 0:
         print(f"NOTE: {res['needs_reindex_count']} docs had description changes — "
               f"run `reindex --force` on {args.out} to refresh their vectors.",
@@ -283,6 +289,14 @@ def _run_update_links(args: argparse.Namespace) -> Any:
         linked = update_links(args.id, content, idx)
     finally:
         idx.close()
+    if not linked:
+        # Empty result is ambiguous (no Related heading / all self-links /
+        # targets not indexed) — surface the contract instead of returning a
+        # bare [] (Rule: failures must be explicit).
+        print("NOTE: 0 links established. --content must contain a "
+              "'## Related Recommendations' / '## Related' heading block; "
+              "links are only written for target URLs already in the index "
+              "(self-links are skipped).", file=sys.stderr)
     out = {"linked": linked}
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return linked

@@ -70,7 +70,7 @@ class TestConfigSet:
     def _write_cfg(self, tmp_path: Path) -> Path:
         p = tmp_path / "config.json"
         p.write_text(json.dumps({
-            "embed_model": "sentence-transformers/paraphrase-MiniLM-L3-v2",
+            "embed_model": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
             "embed_api_key": "",
             "context_ttl_days": 30,
             "query": {"default_top_k": 5},

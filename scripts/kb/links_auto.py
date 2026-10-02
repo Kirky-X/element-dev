@@ -9,7 +9,7 @@ kinds of links coexist:
   - implicit (from vector similarity) — handled by this module
 
 User requirement: docs whose cosine similarity > 0.9 must be auto-linked
-bidirectionally. The current DB ships with all 964 docs having links=[]
+bidirectionally. The current DB ships with all 99 docs having links=[]
 because links.py only extracts from "Related Recommendations" sections, which most docs lack.
 
 Design:

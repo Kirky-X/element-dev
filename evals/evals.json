@@ -1,0 +1,105 @@
+{
+  "skill_name": "element-dev",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Flutter 的 ListView 怎么做虚拟滚动和懒加载",
+      "expected_output": "不触发 element-dev（其 KB 为 element-plus.org 文档，无 Flutter 内容）；路由到 flutter-dev，由其 KB 查询 ListView虚拟滚动/懒加载相关 Widget 文档并回答",
+      "assertions": [
+        "element-dev 未被加载或未被采用",
+        "回答基于 flutter-dev 的知识库或 Flutter 文档"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Widget 布局溢出 RenderFlex overflowed 怎么排查",
+      "expected_output": "不触发 element-dev；路由到 flutter-dev，按其 RenderFlex 溢出诊断流程回答",
+      "assertions": [
+        "element-dev 未被加载或未被采用",
+        "回答包含 RenderFlex/Flutter 上下文而非 Element Plus 组件文档"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "ArkTS 里 Scroll 和 List 组件怎么嵌套滚动",
+      "expected_output": "不触发 element-dev；路由到 hap-dev，由其鸿蒙文档知识库回答 ArkUI Scroll/List 嵌套滚动",
+      "assertions": [
+        "element-dev 未被加载或未被采用",
+        "回答基于 HarmonyOS/ArkUI 文档"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "把这份设计稿转成 Element Plus 登录页代码，出组件规格",
+      "expected_output": "不触发 element-dev（boundary：设计稿→Element Plus 代码生成归 maliang）；路由到 maliang 走设计→实现流程；element-dev 最多在实现阶段被 maliang 侧用于查组件 Props 文档",
+      "assertions": [
+        "element-dev 不作为主 skill 承接该任务",
+        "设计稿解析、组件规格产出由 maliang 完成"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "这个 Element Plus 页面太模板化了，帮我重设计一下",
+      "expected_output": "不触发 element-dev（重设计/去模板化是设计任务）；路由到 maliang（或 redesign-existing-projects）做视觉与设计系统改造",
+      "assertions": [
+        "element-dev 未被加载或未被采用",
+        "产出为设计方案/DESIGN.md 类，而非文档检索"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "Element UI（Vue 2）的 el-table 怎么用",
+      "expected_output": "不触发 element-dev（Element UI 是 Vue 2 的另一套库，element-dev KB 只覆盖 element-plus.org 的 Vue 3 文档）；交由通用回答或外部 Element UI 文档",
+      "assertions": [
+        "element-dev 未被加载，或加载后明确声明 KB 不覆盖 Element UI/Vue 2 而非用 Element Plus 文档冒充回答",
+        "回答不把 Element Plus 的 API 当作 Element UI 的答案"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Ant Design 的 Table 分页和排序怎么配",
+      "expected_output": "不触发 element-dev（其他 UI 库，触发词均带 Element Plus/El 前缀限定）；交由通用回答或外部文档",
+      "assertions": [
+        "element-dev 未被加载或未被采用",
+        "回答基于 Ant Design 文档"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "Vue 3 里 ref 和 reactive 怎么选",
+      "expected_output": "不触发 element-dev（纯 Vue 响应式 API 问题，其 KB 99 篇均为 element-plus.org 站点文档，无 Vue API 教学内容）；交由通用 Vue 知识回答。注意：与 hap-dev 两侧 triggers/evals 已统一 owner=none（原 hap 侧登记 owner=element-dev，已裁决修正）。",
+      "assertions": [
+        "element-dev 未被加载，或加载后明确声明该问题不在 KB 覆盖范围",
+        "不虚构 element-dev 知识库中存在 Vue 响应式 API 文档"
+      ]
+    },
+    {
+      "id": 9,
+      "prompt": "Element Plus 项目里 npm 装依赖报 node-sass gyp ERR 怎么修",
+      "expected_output": "不触发 element-dev（通用 Node 构建工具链报错，与 Element Plus 组件文档无关，description 的「Element Plus 报错」限定为组件/API 报错）；交由通用回答",
+      "assertions": [
+        "element-dev 未被加载，或加载后未用组件文档冒充构建问题答案",
+        "回答面向 node-sass/gyp 修复"
+      ]
+    },
+    {
+      "id": 10,
+      "prompt": "Vue Router 的路由守卫 beforeEach 怎么写",
+      "expected_output": "不触发 element-dev（纯 Vue Router API 问题，其 KB 99 篇均为 element-plus.org 站点文档，无路由库内容）；交由通用 Vue 知识回答。与 id 8 同类：description「Vue 3 UI library」词面会吸引 Vue Router 生态问题",
+      "assertions": [
+        "element-dev 未被加载，或加载后明确声明该问题不在 KB 覆盖范围",
+        "不虚构 element-dev 知识库中存在 Vue Router 文档"
+      ]
+    },
+    {
+      "id": 11,
+      "prompt": "帮我初始化一个 Vue 3 + Element Plus 的后台管理项目",
+      "expected_output": "路由到 pangu 做项目脚手架初始化（其触发词「初始化项目/新建项目/脚手架」直接命中）；element-dev 不作为主 skill 承接——本 skill 只做 Element Plus 文档知识库查询，至多在 pangu 生成工程后辅助查询组件用法文档。description 已补「project scaffolding belongs to pangu」让渡（2026-10-02，词法实测 pangu 以 0.167 稳定压制 element-dev 第 2）",
+      "assertions": [
+        "pangu 作为主 skill 承接工程初始化",
+        "element-dev 未被用作执行脚手架的主体",
+        "不虚构 element-dev 具备工程创建能力"
+      ]
+    }
+  ]
+}

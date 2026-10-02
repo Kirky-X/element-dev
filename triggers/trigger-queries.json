@@ -1,0 +1,137 @@
+{
+  "skill": "element-dev",
+  "queries": [
+    {
+      "q": "ElTable 怎么自定义列内容？",
+      "expect": "trigger",
+      "mirror": "maliang"
+    },
+    {
+      "q": "Element Plus 的 el-table 怎么动态控制列宽",
+      "expect": "trigger",
+      "mirror": "flutter-dev"
+    },
+    {
+      "q": "Vue 3 项目里 ElDialog 关闭时销毁子元素怎么配置",
+      "expect": "trigger",
+      "mirror": "flutter-dev"
+    },
+    {
+      "q": "给 el-form 的登录表单加校验规则",
+      "expect": "trigger",
+      "mirror": "flutter-dev"
+    },
+    {
+      "q": "帮我初始化一个 Vue 3 + Element Plus 的后台管理项目",
+      "expect": "no",
+      "owner": "pangu",
+      "note": "2026-10-02 改判：词法实测 top1=pangu(0.167) 且 pangu 触发词（初始化项目/脚手架）语义更贴合；本 skill 只能查 installation/quickstart 文档而非执行脚手架——description 已补「project scaffolding belongs to pangu」让渡（双写 evals id 11）"
+    },
+    {
+      "q": "Element Plus 的 ElTable 自定义列怎么写",
+      "expect": "trigger",
+      "mirror": "hap-dev"
+    },
+    {
+      "q": "ElButton 的 type 属性有哪些取值？",
+      "expect": "trigger"
+    },
+    {
+      "q": "el-table 的 selection-change 事件参数是什么",
+      "expect": "trigger"
+    },
+    {
+      "q": "ElDialog 的 before-close 怎么拦截关闭",
+      "expect": "trigger"
+    },
+    {
+      "q": "Element Plus 报错 [ElForm] model is required, please check",
+      "expect": "trigger"
+    },
+    {
+      "q": "查一下 el-select 远程搜索 remote-method 的用法",
+      "expect": "trigger"
+    },
+    {
+      "q": "Vue 3 组件库 Element Plus 的 Table 虚拟滚动怎么开启",
+      "expect": "trigger"
+    },
+    {
+      "q": "How do I disable specific dates in the Element Plus DatePicker?",
+      "expect": "trigger"
+    },
+    {
+      "q": "el-form rules 里自定义 validator 怎么写",
+      "expect": "trigger"
+    },
+    {
+      "q": "Element Plus 暗黑模式怎么开启",
+      "expect": "trigger",
+      "note": "KB design-guide 2.4 暗黑模式文档覆盖（sidebars/element-plus-design-guide-sidebar.md:21 实测核对）"
+    },
+    {
+      "q": "@element-plus/icons-vue 图标怎么引入使用",
+      "expect": "trigger",
+      "note": "KB component 2.5 Icon 图标文档覆盖（sidebars/element-plus-component-sidebar.md:15 实测核对）；词法实测 MISS：top1=xizhi(0.074)「图标」字面吸引，element-dev 第 2——与 xizhi 的图标边界存在词面重叠，语义上「组件引入用法」归本 skill"
+    },
+    {
+      "q": "How to set the width of each column in ElTable?",
+      "expect": "trigger",
+      "note": "词法实测 MISS：top1=xizhi(0.107)，element-dev 第 3——xizhi 触发面泛化导致英文 query 词法争夺，语义归本 skill"
+    },
+    {
+      "q": "Flutter 的 ListView 怎么做虚拟滚动和懒加载",
+      "expect": "no",
+      "owner": "flutter-dev"
+    },
+    {
+      "q": "Widget 布局溢出 RenderFlex overflowed 怎么排查",
+      "expect": "no",
+      "owner": "flutter-dev"
+    },
+    {
+      "q": "ArkTS 里 Scroll 和 List 组件怎么嵌套滚动",
+      "expect": "no",
+      "owner": "hap-dev"
+    },
+    {
+      "q": "把这份设计稿转成 Element Plus 登录页代码，出组件规格",
+      "expect": "no",
+      "owner": "maliang"
+    },
+    {
+      "q": "这个 Element Plus 页面太模板化了，帮我重设计一下",
+      "expect": "no",
+      "owner": "maliang"
+    },
+    {
+      "q": "Element UI（Vue 2）的 el-table 怎么用",
+      "expect": "no",
+      "owner": "external",
+      "note": "description 已补排除声明「Element UI (Vue 2) is a different library and NOT covered (use external Element UI docs)」（2026-10-02）；让渡句含 Element UI 词元属已知词法噪声区（baseline 判据），语义方向正确，留待 Tier3 实测"
+    },
+    {
+      "q": "Ant Design 的 Table 分页和排序怎么配",
+      "expect": "no",
+      "owner": "external"
+    },
+    {
+      "q": "Vue 3 里 ref 和 reactive 怎么选",
+      "expect": "no",
+      "owner": "none",
+      "note": "与 hap-dev 两侧统一 owner=none：本仓 KB 99 篇均为 element-plus.org 文档，无 Vue 响应式 API 内容，接不住；description 的 Element Plus/Vue 让渡句指 Element Plus 生态问题"
+    },
+    {
+      "q": "Element Plus 项目里 npm 装依赖报 node-sass gyp ERR 怎么修",
+      "expect": "no",
+      "owner": "none",
+      "note": "description 触发词已改「Element Plus 组件或 API 报错」加限定（2026-10-02）；「Element Plus」词元共现仍存在词面吸引，语义方向正确，留待 Tier3 实测"
+    },
+    {
+      "q": "Vue Router 的路由守卫 beforeEach 怎么写",
+      "expect": "no",
+      "owner": "none",
+      "note": "纯 Vue Router API，KB 99 篇均无路由库内容；description「Vue 3 UI library」词面吸引（双写 evals id 10）"
+    }
+  ]
+}

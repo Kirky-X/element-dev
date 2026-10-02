@@ -53,11 +53,11 @@ def assert_compatible(indexer: Any, embedder: Any, context: str = "") -> None:
     # BUG-2: a DB with multiple distinct non-empty embed_models is already
     # contaminated — even if the current embedder is one of them, the existing
     # vectors cannot be compared across models. Refuse loud so the operator
-    # knows to rebuild (migrate-embed-model --rebuild) before any query/write.
+    # knows to rebuild from sidebars before any query/write.
     if len(real) > 1:
         raise ValueError(
             f"{context}: DB already polluted — found {len(real)} distinct "
             f"embed_models ({sorted(real)!r}). Cosine similarity across "
-            f"models is meaningless. Run "
-            f"`python3 scripts/kb/migrate-embed-model.py --rebuild` to fix."
+            f"models is meaningless. Rebuild from sidebars: "
+            f"`python3 scripts/kb/build_db.py`."
         )

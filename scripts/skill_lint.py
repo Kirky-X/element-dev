@@ -10,11 +10,24 @@
         description ≤1024 字符；.gitignore 含 specmark/（全局规则 24）；
         JSON 资产（skill.json/test-prompts.json/evals/*.json/根级 *.json）可解析；
         frontmatter metadata 与 skill.json version 一致；
-        SKILL.md 与 references/**/*.md 中引用的 .md 路径存在。
+        SKILL.md 与 references/**/*.md 中引用的 .md 路径存在；
+        可选 lint-checks.json 声明的仓内自检规则未满足（require-pattern /
+        file-header 两类，按仓 opt-in；配置本身非法同样 FAIL）。
   WARN  frontmatter metadata 缺失（agentskills 规范）；SKILL.md >500 行；
         scripts/ 有可执行脚本但无 tests/；references 孤儿文件；LICENSE 缺失。
 
 退出码: 0=无 FAIL（WARN 不阻断）; 1=存在 FAIL。
+
+lint-checks.json（仓根，可选）schema:
+  {"checks": [
+    {"name": "规则名", "type": "require-pattern",          # type 缺省为 require-pattern
+     "file": "references/guide.md", "pattern": "<regex>",
+     "min_count": 1,                                       # 缺省 1
+     "severity": "FAIL"},                                  # 缺省 FAIL，可 WARN
+    {"name": "资产文件头三要素", "type": "file-header",
+     "dirs": ["references/commands", "references/templates"],
+     "fields": ["来源", "许可", "核验日期"]}                # fields 缺省即三要素
+  ]}
 """
 
 from __future__ import annotations
@@ -114,6 +127,85 @@ def check_orphans(repo: Path) -> list[str]:
             continue
         orphans.append(stem_rel)
     return orphans
+
+
+def check_repo_rules(repo: Path) -> tuple[list[str], list[str]]:
+    """可选 lint-checks.json 声明的仓内自检规则（按仓 opt-in，无此文件即跳过）。
+
+    规则错误（目标文件缺失/非法正则/未知键/未知 type/severity 非法）一律 FAIL，
+    不随规则自身的 severity 降级——配置写错必须显性化，不能静默跳过。
+    """
+    fails: list[str] = []
+    warns: list[str] = []
+    name = repo.name
+    cfg_path = repo / "lint-checks.json"
+    if not cfg_path.is_file():
+        return fails, warns
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"{name}: lint-checks.json 非法 JSON: {exc}"], warns
+    if not isinstance(cfg, dict) or set(cfg) != {"checks"} or not isinstance(cfg["checks"], list):
+        return [f'{name}: lint-checks.json 顶层必须是 {{"checks": [...]}} 映射'], warns
+    for i, rule in enumerate(cfg["checks"], 1):
+        where = f"lint-checks.json checks[{i}]"
+        if not isinstance(rule, dict):
+            fails.append(f"{name}: {where} 不是对象")
+            continue
+        unknown = set(rule) - {"name", "type", "file", "pattern", "min_count", "dirs", "fields", "severity"}
+        if unknown:
+            fails.append(f"{name}: {where} 未知键: {sorted(unknown)}")
+            continue
+        rtype = rule.get("type", "require-pattern")
+        if rtype not in ("require-pattern", "file-header"):
+            fails.append(f"{name}: {where} 未知 type: {rtype!r}")
+            continue
+        sev = rule.get("severity", "FAIL")
+        if sev not in ("FAIL", "WARN"):
+            fails.append(f"{name}: {where} severity 只能是 FAIL/WARN")
+            continue
+        rname = str(rule.get("name") or where)
+        if rtype == "require-pattern":
+            rel, pattern = rule.get("file"), rule.get("pattern")
+            if not rel or not pattern:
+                fails.append(f"{name}: {where} require-pattern 需要 file 与 pattern")
+                continue
+            target = repo / rel
+            if not target.is_file():
+                fails.append(f"{name}: {where} 目标文件不存在: {rel}")
+                continue
+            min_count = rule.get("min_count", 1)
+            if not isinstance(min_count, int) or min_count < 1:
+                fails.append(f"{name}: {where} min_count 必须为 ≥1 整数")
+                continue
+            try:
+                found = len(re.findall(pattern, target.read_text(encoding="utf-8", errors="replace")))
+            except re.error as exc:
+                fails.append(f"{name}: {where} 非法正则: {exc}")
+                continue
+            if found < min_count:
+                bucket = fails if sev == "FAIL" else warns
+                bucket.append(f"{name}: {rname} 未满足（{rel} 命中 {found}/{min_count}）")
+        else:  # file-header
+            dirs, fields = rule.get("dirs"), rule.get("fields", ["来源", "许可", "核验日期"])
+            if not dirs or not fields:
+                fails.append(f"{name}: {where} file-header 需要 dirs 与 fields")
+                continue
+            assets: list[Path] = []
+            for d in dirs:
+                base = repo / d
+                if base.is_dir():
+                    assets.extend(sorted(base.rglob("*.md")))
+            if not assets:
+                warns.append(f"{name}: {rname} 未找到资产文件（dirs={dirs} 为空）")
+                continue
+            for p in assets:
+                text = p.read_text(encoding="utf-8", errors="replace")
+                missing = [f for f in fields if f not in text]
+                if missing:
+                    bucket = fails if sev == "FAIL" else warns
+                    bucket.append(f"{name}: {rname} 缺少 {'、'.join(missing)}: {p.relative_to(repo)}")
+    return fails, warns
 
 
 def parse_frontmatter(text: str):
@@ -238,6 +330,10 @@ def lint_repo(repo: Path) -> tuple[list[str], list[str]]:
             f"{name}: {len(orphans)} 个 references 文件未被任何文档引用（导航挂载待审计，勿贸然删除）："
             + "；".join(orphans[:3])
         )
+
+    rule_fails, rule_warns = check_repo_rules(repo)
+    fails.extend(rule_fails)
+    warns.extend(rule_warns)
 
     vendored = repo / "scripts" / "skill_lint.py"
     canonical = Path(__file__).resolve()

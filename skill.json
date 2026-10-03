@@ -2,7 +2,7 @@
   "name": "element-dev",
   "description": "Element Plus development skill. Trigger: Element Plus/Element Plus components/ElButton/ElTable/ElForm/ElDialog/Vue 3 UI library/element-plus.org documentation query/component usage/Props/Events/Slots/组件用法/查组件文档/Element Plus 组件或 API 报错/组件属性怎么配. Boundary: this skill only does Element Plus documentation knowledge base queries; design-to-Element Plus code generation belongs to maliang; Element UI (Vue 2) is a different library and NOT covered (use external Element UI docs); project scaffolding belongs to pangu; Flutter/Dart belongs to flutter-dev; HarmonyOS/ArkTS belongs to hap-dev.",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "author": "Kirky-X",
   "repo": "https://github.com/Kirky-X/element-dev",
   "homepage": "https://github.com/Kirky-X/element-dev",

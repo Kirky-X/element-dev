@@ -25,8 +25,8 @@ Vue 3 + Element Plus component library development assistance skill. Three subco
 | Doc source | HarmonyOS Search API (POST + multi-catalog routing) | element-plus.org static site (HTTP GET) |
 | Online module | `scripts/search/{search.py, detail.py}` dual endpoints | `scripts/fetcher/fetch.py` single GET |
 | Sidebar format | `#### N.N [title](url)` | `### N.N[.] [title](url)` (3 hashes + optional trailing period) |
-| Doc count | 964 (9 categories) | 99 (2 categories: design-guide + component) |
-| KB module | Domain-agnostic | Same as hap-dev (B1-B13 fixes all inherited) |
+| Doc count | 967 (9 categories) | 99 (2 categories: design-guide + component) |
+| KB module | Domain-agnostic | Same origin (B1-B13 fixes inherited) but CLI subcommand sets have diverged: 8 shared; element-dev adds show/update-links/fetch-update (11 total), hap-dev has 6 additional domain subcommands (14 total) |
 
 ## Subcommand Routing
 
@@ -57,13 +57,17 @@ python3 {SKILL_DIR}/scripts/kb/cli.py query --question "ElTable virtual scrollin
 
 Hybrid search: vector similarity (weight 0.7) + BM25 keywords (weight 0.3), optional FlashRank reranking. Each result carries `context_preview` (first 300 chars of the stored page content); use `kb show --id <id>` for the full `context`.
 
+Query flags (`--help` measured): `--doc-type <type>` pre-filters candidates by the payload `doc_type` field (`design-guide`/`component`); `--rerank` enables FlashRank reranking for this query (off by default).
+
 ### kb build — Full Build
 
 ```bash
 python3 -m scripts.kb.cli build
 ```
 
-Parses 2 sidebar files → embeds 99 documents → writes to `data/element-plus.qdrant`. Auto-generates `data/element-plus.qdrant.meta.json` after B11.
+Parses 2 sidebar files → embeds 99 documents → writes to `data/element-plus.qdrant`. It does **not** write `data/element-plus.qdrant.meta.json` — that B11 build meta (`doc_count`/`embed_model`/`content_hashes`, read for stale detection) is generated/refreshed only by the one-shot prebuild script `python3 scripts/kb/build_db.py`. `--sidebars-dir <dir>` overrides the `sidebars_dir` config value.
+
+The two sidebar files are produced by `bash scripts/fetch-sidebars.sh`, a pass-through wrapper over `scripts/fetch-sidebars.py` (`--lang`, default en-US; `--source auto|site|github`; `--out-dir`; `--dry-run`).
 
 ### kb show — Read One Doc (Full Context)
 
@@ -150,7 +154,7 @@ python3 -m scripts.kb.cli config
 python3 -m scripts.kb.cli config --key embed_model --value sentence-transformers/all-MiniLM-L6-v2
 ```
 
-`--key/--value` validates the key against the known schema (nested keys use dots, e.g. `query.default_top_k`) and coerces the value to the field's type; the previous `config.json` is backed up to `config.json.bak` before writing. Secrets (`embed_api_key`/`rerank_api_key`) are printed masked as `***<last4>`.
+`--key/--value` validates the key against the known schema (nested keys use dots, e.g. `query.default_top_k`) and coerces the value to the field's type; the previous `config.json` is backed up to `config.json.bak` before writing. Secrets (`embed_api_key`/`rerank_api_key`) are printed masked as `***<last4>`. Every kb subcommand also accepts `--config <path>` to load an alternative config file (a missing path raises `FileNotFoundError`; relative `db_path`/`sidebars_dir` inside it are anchored to that file's directory).
 
 ### kb query failure fallback (context7)
 
@@ -185,7 +189,7 @@ if 'error' not in r:
 "
 ```
 
-Returns `{title, url, content}`, where content is in Markdown format. Extracts `<main>` tag content to avoid navigation/footer interference. Known cleanup applied and limits: Cloudflare email-protection artifacts and `element-plus.run/#<base64>` demo links are stripped; any residual demo scaffolding inside page bodies is left as-is.
+Returns `{title, url, content}`, where content is in Markdown format. Extracts `<main>` tag content to avoid navigation/footer interference. Known cleanup applied and limits: Cloudflare email-protection artifacts and `element-plus.run/#<base64>` demo links are stripped; any residual demo scaffolding inside page bodies is left as-is. `--allow-any-host` disables the hostname whitelist for deliberate non-element-plus.org fetches; the internal-IP block still applies.
 
 ## Configuration
 
@@ -196,11 +200,18 @@ Returns `{title, url, content}`, where content is in Markdown format. Extracts `
 | `embed_model` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Embedding model |
 | `embed_dim` | `384` | Vector dimension |
 | `embed_source` | `modelscope` | Model source (modelscope/huggingface/openai) |
+| `embed_base_url` | `""` | Cloud embedding base URL (required non-empty for `openai://` embed models) |
+| `embed_api_key` | `""` | Cloud embedding API key (printed masked as `***<last4>`) |
+| `rerank_model` | `flashrank` | Rerank model identifier (reranking currently uses local FlashRank; this key is not read yet) |
+| `rerank_source` | `local` | Rerank source (reserved; not read by code yet) |
+| `rerank_base_url` | `""` | Rerank service base URL (reserved; not read by code yet) |
+| `rerank_api_key` | `""` | Rerank API key (printed masked as `***<last4>`; not read by the retrieval path yet) |
 | `db_path` | `data/element-plus.qdrant` | Qdrant local DB path |
 | `collection` | `element_plus_docs` | Qdrant collection name |
 | `sidebars_dir` | `sidebars` | Sidebar file directory |
 | `site_base` | `https://element-plus.org` | Doc site base URL |
 | `context_ttl_days` | `30` | C1: context cache TTL (days), fetch verifies hash after expiry |
+| `endpoints` | `{}` | Reserved (not read by code yet) |
 | `query.default_top_k` | `5` | Default top-K results |
 | `query.bm25_weight` | `0.3` | BM25 weight |
 | `query.vector_weight` | `0.7` | Vector weight |

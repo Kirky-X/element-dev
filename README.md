@@ -15,7 +15,9 @@
 | `fetch` | HTTP GET 抓取 element-plus.org 静态文档页，提取 `<main>` 转 Markdown，清理 Cloudflare email-protection 痕迹，返回 `{title, url, content}` |
 | `config` | 查看/修改 embed_model、db_path、context_ttl_days 等配置；`--key/--value` 按已知 schema 校验并做类型矫正，写前备份 `config.json.bak`，密钥打印掩码为 `***<末4位>`（实测 `sk-test1234abcd` → `***abcd`） |
 
-**预构建知识库开箱即用**：仓库自带 `data/element-plus.qdrant/`（512KB，meta 实测 `doc_count: 99`），99 篇文档 = design-guide 17 + component 82，默认嵌入模型 `paraphrase-multilingual-MiniLM-L12-v2`（384 维，ModelScope 下载源）。
+**CLI 参数**（`--help` 实测）：kb 全部 11 个子命令均支持 `--config <path>` 指定配置文件（文件内的相对 `db_path`/`sidebars_dir` 相对该配置文件所在目录解析，路径不存在报 `FileNotFoundError`）；`query` 另有 `--doc-type`（按 payload `doc_type` 过滤，design-guide/component）与 `--rerank`（本次查询启用 FlashRank 重排）；`build` 另有 `--sidebars-dir`（覆盖配置中的 `sidebars_dir`）；`fetch.py` 另有 `--allow-any-host`（关闭主机名白名单，内网 IP 拦截仍生效）。
+
+**预构建知识库开箱即用**：仓库自带 `data/element-plus.qdrant/`（约 520KB，meta 实测 `doc_count: 99`），99 篇文档 = design-guide 17 + component 82，默认嵌入模型 `paraphrase-multilingual-MiniLM-L12-v2`（384 维，ModelScope 下载源）。
 
 **混合检索**：向量相似（0.7）+ BM25 关键词（0.3）融合，可选 FlashRank 重排。query 返回 300 字 `context_preview`，`kb show --id` 打印含完整 `context` 的 12 字段 payload。
 
@@ -78,9 +80,9 @@ flowchart LR
 
 ## ✅ 测试与验证
 
-实测 `python3 -m pytest tests/ scripts/ -q`：**67 passed**（tests/ 53 + scripts/kb/tests/ 14）。注意只跑 `scripts/` 只能收集到 14 个，根目录 `tests/` 必须显式传入。测试用 `FakeEmbedder`（SHA1 派生确定性向量），离线可跑。
+实测 `python3 -m pytest tests/ scripts/ -q`：**70 passed**（tests/ 56 + scripts/kb/tests/ 14）。注意只跑 `scripts/` 只能收集到 14 个，根目录 `tests/` 必须显式传入。测试用 `FakeEmbedder`（SHA1 派生确定性向量），离线可跑。
 
-> `sidebars/` 被 gitignore（开发期产物不入仓库），clone 后需先跑 `scripts/fetch-sidebars.sh` 生成才能 `kb build`；`tests/`（10 文件）与预构建库 `data/element-plus.qdrant/` 随仓库分发，clone 后即可离线跑全部 67 个测试。
+> `sidebars/` 被 gitignore（开发期产物不入仓库），clone 后需先跑 `scripts/fetch-sidebars.sh` 生成才能 `kb build`；`tests/`（10 文件）与预构建库 `data/element-plus.qdrant/` 随仓库分发，clone 后即可离线跑全部 70 个测试。
 
 ## 📁 目录结构
 
@@ -96,13 +98,15 @@ element-dev/
 └── scripts/
     ├── kb/                     # cli.py + query/indexer/merge/reindex/fetch_update/config 等
     ├── fetcher/                # _http.py（SSRF 双层防护）+ fetch.py
-    └── fetch-sidebars.sh       # sidebar 下载入口（首次使用必跑）
+    ├── fetch-sidebars.sh       # sidebar 下载入口（首次使用必跑，参数透传给 fetch-sidebars.py）
+    ├── fetch-sidebars.py       # sidebar 下载实际实现（--lang/--source/--out-dir/--dry-run）
+    └── skill_lint.py           # 仓库工程基线体检（CI 门禁：python3 scripts/skill_lint.py .）
 ```
 
 ## 🔮 边界
 
 - 只做 Element Plus 文档知识库查询与维护；设计稿 → 代码生成属于 **maliang**
-- KB 模块与 hap-dev 同源（B1-B13 修复全量继承），差异在文档源与 sidebar 格式（964 篇/9 类 vs 99 篇/2 类）
+- KB 模块与 hap-dev 同源（B1-B13 修复全量继承），差异在文档源、sidebar 格式与 CLI 子命令集（967 篇/9 类 vs 99 篇/2 类；8 个子命令共有，element-dev 独有 show/update-links/fetch-update，hap-dev 另有 6 个领域子命令）
 - 禁止跨模型向量空间混用（向量身份 = model+dim+source+version，build/merge/query 入口强校验）；禁止单向链接；禁止混淆 `content_hash`（元数据变更）与 `context_hash`（网页内容变更）；抓取必须清理 Cloudflare 痕迹否则 context_hash 永不稳定
 - 页面正文内残留的 demo 脚手架不做清理（仅清理 Cloudflare 痕迹与 `element-plus.run/#<base64>` 演示链接）
 

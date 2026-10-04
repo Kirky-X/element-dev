@@ -15,7 +15,9 @@ English | [中文](README.md)
 | `fetch` | HTTP GET fetches static documentation pages from element-plus.org, extracts `<main>` into Markdown, cleans Cloudflare email-protection traces, and returns `{title, url, content}` |
 | `config` | Views/edits embed_model, db_path, context_ttl_days, and other settings; `--key/--value` validates against the known schema with type coercion, backs up `config.json.bak` before writing, and masks printed secrets as `***<last 4 chars>` (measured: `sk-test1234abcd` → `***abcd`) |
 
-**Pre-built knowledge base, ready out of the box**: the repo ships `data/element-plus.qdrant/` (512KB; meta measured `doc_count: 99`); 99 documents = design-guide 17 + component 82; default embedding model `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ModelScope download source).
+**CLI flags** (measured via `--help`): all 11 kb subcommands accept `--config <path>` to load an alternative config file (relative `db_path`/`sidebars_dir` inside it are anchored to that file's directory; a missing path raises `FileNotFoundError`); `query` additionally takes `--doc-type` (payload `doc_type` filter: design-guide/component) and `--rerank` (enable FlashRank reranking for this query); `build` additionally takes `--sidebars-dir` (overrides `sidebars_dir` from config); `fetch.py` additionally takes `--allow-any-host` (disables the hostname whitelist; the internal-IP block still applies).
+
+**Pre-built knowledge base, ready out of the box**: the repo ships `data/element-plus.qdrant/` (~520KB; meta measured `doc_count: 99`); 99 documents = design-guide 17 + component 82; default embedding model `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ModelScope download source).
 
 **Hybrid retrieval**: vector similarity (0.7) fused with BM25 keywords (0.3), with optional FlashRank reranking. query returns a 300-character `context_preview`; `kb show --id` prints the 12-field payload including the full `context`.
 
@@ -78,9 +80,9 @@ flowchart LR
 
 ## ✅ Tests & Verification
 
-Measured `python3 -m pytest tests/ scripts/ -q`: **67 passed** (tests/ 53 + scripts/kb/tests/ 14). Note that running only `scripts/` collects just 14 tests; the root-level `tests/` must be passed explicitly. Tests use a `FakeEmbedder` (SHA1-derived deterministic vectors) and run offline.
+Measured `python3 -m pytest tests/ scripts/ -q`: **70 passed** (tests/ 56 + scripts/kb/tests/ 14). Note that running only `scripts/` collects just 14 tests; the root-level `tests/` must be passed explicitly. Tests use a `FakeEmbedder` (SHA1-derived deterministic vectors) and run offline.
 
-> `sidebars/` is gitignored (development-time artifact, not in the repo), so run `scripts/fetch-sidebars.sh` first after cloning before `kb build`; `tests/` (10 files) and the pre-built `data/element-plus.qdrant/` ship with the repo — all 67 tests run offline right after cloning.
+> `sidebars/` is gitignored (development-time artifact, not in the repo), so run `scripts/fetch-sidebars.sh` first after cloning before `kb build`; `tests/` (10 files) and the pre-built `data/element-plus.qdrant/` ship with the repo — all 70 tests run offline right after cloning.
 
 ## 📁 Directory Structure
 
@@ -96,13 +98,15 @@ element-dev/
 └── scripts/
     ├── kb/                     # cli.py + query/indexer/merge/reindex/fetch_update/config 等
     ├── fetcher/                # _http.py（SSRF 双层防护）+ fetch.py
-    └── fetch-sidebars.sh       # sidebar 下载入口（首次使用必跑）
+    ├── fetch-sidebars.sh       # sidebar 下载入口（首次使用必跑，参数透传给 fetch-sidebars.py）
+    ├── fetch-sidebars.py       # sidebar 下载实际实现（--lang/--source/--out-dir/--dry-run）
+    └── skill_lint.py           # 仓库工程基线体检（CI 门禁：python3 scripts/skill_lint.py .）
 ```
 
 ## 🔮 Boundaries
 
 - Only does Element Plus documentation knowledge-base query and maintenance; design-to-code generation belongs to **maliang**
-- The KB module shares its origin with hap-dev (B1-B13 fixes fully inherited); the differences are the doc source and sidebar format (964 docs/9 categories vs 99 docs/2 categories)
+- The KB module shares its origin with hap-dev (B1-B13 fixes fully inherited); the differences are the doc source, sidebar format, and CLI subcommand set (967 docs/9 categories vs 99 docs/2 categories; 8 subcommands shared, element-dev-only show/update-links/fetch-update, hap-dev has 6 additional domain subcommands)
 - Cross-model vector-space mixing is forbidden (vector identity = model+dim+source+version; the build/merge/query entry points enforce validation); one-way links are forbidden; conflating `content_hash` (metadata changes) with `context_hash` (web-page content changes) is forbidden; fetching must clean Cloudflare traces, otherwise context_hash never stabilizes
 - Demo scaffolding left in page bodies is not cleaned (only Cloudflare traces and `element-plus.run/#<base64>` demo links are removed)
 
